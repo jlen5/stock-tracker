@@ -1,0 +1,2391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticker Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: a folder rail on the left, a grid of ticker cards on the right.
+   Each card = interactive chart on the left, quote facts on the right. */
+/* :root {
+  --bg: #edf0f4;
+  --surface: #ffffff;
+  --ink: #131820;
+  --ink-2: #465061;
+  --ink-3: #646e80;
+  --rule: #d9dee6;
+  --rule-2: #e9edf2;
+  --accent: #2b59d9;
+  --up: #0a7a52;
+  --down: #bf3a2c;
+  --shadow: 0 1px 2px rgba(19, 24, 32, .06);
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+} */
+/*dark mode by default*/
+:root {
+  --bg: #0b0e13;
+	--surface: #141922;
+	--ink: #e7ebf1;
+	--ink-2: #a7b0be;
+	--ink-3: #8791a2;
+	--rule: #262d39;
+	--rule-2: #1e2430;
+	--accent: #7ea3ff;
+	--up: #3fd19a;
+	--down: #ff8274;
+	--shadow: none;
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0e13;
+    --surface: #141922;
+    --ink: #e7ebf1;
+    --ink-2: #a7b0be;
+    --ink-3: #8791a2;
+    --rule: #262d39;
+    --rule-2: #1e2430;
+    --accent: #7ea3ff;
+    --up: #3fd19a;
+    --down: #ff8274;
+    --shadow: none;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+[hidden] { display: none !important; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ico { flex: none; display: block; }
+
+/* ---------- top bar ---------- */
+.app { display: grid; grid-template-columns: 252px minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 100%; }
+.top {
+  grid-column: 1 / -1;
+  position: sticky; top: 0; z-index: 30;
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--rule);
+}
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; font-size: 15px; letter-spacing: .01em; white-space: nowrap; }
+.brand svg { color: var(--accent); }
+
+.add { position: relative; flex: 1 1 auto; max-width: 600px; display: flex; align-items: center; gap: 8px; }
+.add .field { position: relative; flex: 1; display: flex; align-items: center; }
+.add .field .ico { position: absolute; left: 11px; color: var(--ink-3); pointer-events: none; }
+.add input {
+  width: 100%; height: 36px; padding: 0 34px 0 34px;
+  border: 1px solid var(--rule); border-radius: 8px; background: var(--bg);
+  font-family: var(--font-num); font-size: 13px;
+}
+.add input::placeholder { color: var(--ink-3); font-family: var(--font-ui); }
+.add kbd {
+  position: absolute; right: 9px; font: 500 11px var(--font-num); color: var(--ink-3);
+  border: 1px solid var(--rule); border-radius: 4px; padding: 0 5px; line-height: 17px;
+}
+.btn {
+  height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--rule);
+  background: var(--surface); font-weight: 500;
+}
+.btn:hover { background: var(--bg); }
+.btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn.primary:hover { opacity: .88; }
+.sugg {
+  position: absolute; top: 42px; left: 0; right: 0; z-index: 40; margin: 0; padding: 4px; list-style: none;
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .16); max-height: 340px; overflow: auto;
+}
+.sugg li { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+.sugg li[aria-selected="true"], .sugg li:hover { background: var(--bg); }
+.sugg .s-sym { font: 500 13px var(--font-num); }
+.sugg .s-name { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sugg .s-meta { color: var(--ink-3); font-size: 11px; }
+.sugg .s-empty { display: block; color: var(--ink-3); cursor: default; }
+
+.status { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+.icon-btn {
+  display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  border: 0; border-radius: 7px; background: none; color: var(--ink-2); position: relative;
+}
+.icon-btn:hover { background: var(--bg); color: var(--ink); }
+.icon-btn.sm { width: 26px; height: 26px; }
+.icon-btn .badge {
+  position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px;
+  background: var(--accent); color: var(--surface); font: 600 10px/15px var(--font-ui); text-align: center;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinning .ico { animation: spin .8s linear infinite; }
+
+/* ---------- folder rail ---------- */
+.rail { padding: 18px 12px 20px 16px; border-right: 1px solid var(--rule); display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.rail h3 { margin: 0 0 6px 8px; font: 600 11px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); display: flex; align-items: center; justify-content: space-between; }
+.rail ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.rail li { position: relative; display: flex; align-items: center; }
+.nav {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 10px;
+  border: 0; border-radius: 8px; background: none; text-align: left; color: var(--ink-2);
+}
+.nav:hover { background: var(--surface); color: var(--ink); }
+.nav[aria-current="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--rule); }
+.nav-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.count { font: 400 12px var(--font-num); color: var(--ink-3); }
+.nav-actions { position: absolute; right: 36px; display: none; gap: 0; background: var(--surface); border-radius: 7px; }
+li:hover > .nav-actions, li:focus-within > .nav-actions { display: flex; }
+@media (hover: none) { .nav-actions { display: flex; position: static; background: none; } }
+.rail form.inline { flex: 1; display: flex; align-items: center; gap: 2px; }
+.rail form.inline input { flex: 1; min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--accent); border-radius: 8px; background: var(--surface); }
+.confirm { flex-wrap: wrap; gap: 6px; padding: 8px 10px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; font-size: 13px; }
+.confirm span { flex: 1 1 100%; }
+.confirm small { color: var(--ink-3); display: block; }
+.confirm button { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--rule); background: var(--bg); }
+.confirm button.danger { background: var(--down); border-color: var(--down); color: var(--surface); }
+.new-folder { display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 10px; border: 1px dashed var(--rule); border-radius: 8px; background: none; color: var(--ink-2); width: 100%; margin-top: 4px; }
+.new-folder:hover { color: var(--ink); border-color: var(--ink-3); }
+.folder-hint { margin: 6px 8px 0; color: var(--ink-3); font-size: 12px; }
+.rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--ink-3); }
+.rail-foot .row { display: flex; gap: 14px; margin-left: 8px; }
+.link { border: 0; background: none; padding: 0; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; font-size: 12px; }
+.link:hover { color: var(--ink); }
+.warn-text { margin: 0 8px; color: var(--down); }
+
+/* ---------- main ---------- */
+main { padding: 20px 24px 40px; min-width: 0; }
+.view-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.view-head h1 { margin: 0; font: 600 22px/1.2 var(--font-ui); }
+.view-head p { margin: 0; color: var(--ink-3); }
+.board { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 560px), 1fr)); gap: 16px; align-items: start; }
+
+.empty { grid-column: 1 / -1; padding: 40px 24px; text-align: center; background: var(--surface); border: 1px dashed var(--rule); border-radius: 12px; color: var(--ink-2); }
+.empty h2 { margin: 0 0 6px; font: 600 16px var(--font-ui); color: var(--ink); }
+.empty p { margin: 0 auto 16px; max-width: 460px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.chip { height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid var(--rule); background: var(--bg); font: 500 12px var(--font-num); }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---------- card ---------- */
+.card { position: relative; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow); }
+.card.menu-open { z-index: 12; }
+.grip { display: grid; place-items: center; flex: none; width: 24px; height: 30px; margin-left: -10px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--ink-3); cursor: grab; touch-action: none; }
+.grip:hover { color: var(--ink); background: var(--bg); }
+.card.dragging { z-index: 50; box-shadow: 0 18px 40px rgba(0, 0, 0, .28); border-color: var(--accent); }
+body.reordering, body.reordering * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+.card.flash { animation: flash 1.2s ease-out; }
+@keyframes flash { 0% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.card[aria-busy="true"] .chart { opacity: .55; }
+.card-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 2px 16px; }
+.id { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+.sym { margin: 0; font: 600 18px/1.2 var(--font-ui); letter-spacing: .01em; }
+.name { color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mkt { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-2); border: 1px solid var(--rule); border-radius: 10px; padding: 1px 8px; white-space: nowrap; }
+.mkt::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+.mkt.open::before { background: var(--up); }
+.tools { display: flex; gap: 2px; align-items: center; }
+.menu-wrap { position: relative; }
+.menu {
+  position: absolute; right: 0; top: 34px; z-index: 20; width: 240px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, .18);
+}
+.menu h4 { margin: 4px 8px 6px; font: 600 11px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.menu label { display: flex; align-items: center; gap: 9px; padding: 7px 8px; border-radius: 7px; cursor: pointer; }
+.menu label:hover { background: var(--bg); }
+.menu input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+.menu .none { margin: 2px 8px 8px; color: var(--ink-3); font-size: 12px; }
+.menu form { display: flex; gap: 6px; padding: 6px 2px 2px; border-top: 1px solid var(--rule-2); margin-top: 4px; }
+.menu form input { flex: 1; min-width: 0; height: 30px; padding: 0 9px; border: 1px solid var(--rule); border-radius: 7px; background: var(--bg); }
+.menu form button { height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--rule); background: var(--surface); }
+
+.card-body { container-type: inline-size; display: flex; flex-wrap: wrap; gap: 0 20px; padding: 6px 16px 14px; }
+.plot { flex: 1 1 300px; min-width: 0; }
+.facts { flex: 0 1 200px; min-width: 180px; padding-top: 6px; }
+@container (max-width: 520px) {
+  .plot { flex-basis: 100%; }
+  .facts { flex-basis: 100%; min-width: 0; margin-top: 8px; }
+}
+@container (min-width: 400px) and (max-width: 520px) {
+  .facts dl { grid-template-columns: 1fr 1fr; column-gap: 24px; }
+  .facts dl .wk { grid-column: 1 / -1; }
+}
+
+.plot-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; min-height: 30px; }
+.ranges { display: flex; gap: 2px; flex-wrap: wrap; }
+.rng { height: 26px; padding: 0 9px; border: 0; border-radius: 6px; background: none; color: var(--ink-2); font: 500 12px var(--font-ui); }
+.rng:hover { background: var(--bg); color: var(--ink); }
+.rng[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+
+.plot { display: flex; flex-direction: column; }
+.chart { position: relative; flex: 1 1 280px; min-height: 280px; touch-action: pan-y; cursor: crosshair; user-select: none; -webkit-user-select: none; transition: opacity .15s; }
+.chart svg { position: absolute; left: 0; top: 0; display: block; width: 100%; height: 100%; overflow: visible; }
+.chart text { font: 400 11px var(--font-num); fill: var(--ink-3); }
+.chart .ph { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-3); cursor: default; }
+.chart .err { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 0 16px; color: var(--ink-2); cursor: default; }
+.plot-foot { display: flex; justify-content: flex-end; gap: 14px; min-height: 22px; margin-top: 6px; }
+.chart .err strong { color: var(--down); font-weight: 600; }
+.chart .err .row { display: flex; gap: 8px; }
+.chart .err button { height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--rule); background: var(--surface); }
+.tip {
+  position: absolute; top: 4px; z-index: 5; min-width: 150px; padding: 8px 10px; pointer-events: none;
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 18px rgba(0, 0, 0, .14);
+  font-size: 12px; line-height: 1.5;
+}
+.tip .t-date { color: var(--ink-3); }
+.tip .t-price { font: 500 18px/1.3 var(--font-num); }
+.tip .t-row { display: flex; justify-content: space-between; gap: 14px; color: var(--ink-2); }
+.tip .t-row b { font: 500 12px var(--font-num); color: var(--ink); }
+.up { color: var(--up) !important; }
+.down { color: var(--down) !important; }
+.note { margin: 6px 0 0; font-size: 12px; color: var(--down); min-height: 0; }
+.tablewrap { flex: 1 1 280px; min-height: 280px; max-height: 420px; overflow: auto; border: 1px solid var(--rule-2); border-radius: 8px; }
+.tablewrap table { width: 100%; border-collapse: collapse; font: 400 12px var(--font-num); font-variant-numeric: tabular-nums; }
+.tablewrap th { position: sticky; top: 0; background: var(--surface); text-align: right; font: 600 11px var(--font-ui); color: var(--ink-3); padding: 7px 10px; border-bottom: 1px solid var(--rule); }
+.tablewrap th:first-child, .tablewrap td:first-child { text-align: left; }
+.tablewrap td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--rule-2); }
+
+/* ---------- facts ---------- */
+.price { font: 500 28px/1.1 var(--font-num); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.price .cur { font: 400 11px var(--font-ui); color: var(--ink-3); margin-left: 6px; letter-spacing: .04em; }
+.chg-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 8px; }
+.chg-row .lab { font-size: 11px; color: var(--ink-3); }
+.chg { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 9px; border-radius: 6px; font: 500 13px var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; background: var(--bg); color: var(--ink-2); }
+.chg.up { background: color-mix(in srgb, var(--up) 13%, transparent); }
+.chg.down { background: color-mix(in srgb, var(--down) 13%, transparent); }
+.facts dl { margin: 14px 0 0; display: grid; }
+.facts dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; border-top: 1px solid var(--rule-2); }
+.facts dt { color: var(--ink-3); white-space: nowrap; }
+.facts dd { margin: 0; text-align: right; white-space: nowrap; font: 400 13px var(--font-num); font-variant-numeric: tabular-nums; }
+.facts .wk { display: block; }
+.facts .wk .top-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.wk .lab52 { color: var(--ink-3); }
+.wk .bar { position: relative; height: 4px; margin: 8px 0 3px; border-radius: 2px; background: var(--rule); }
+.wk .bar i { position: absolute; top: -3px; width: 3px; height: 10px; margin-left: -1px; border-radius: 2px; background: var(--ink); }
+.wk .ends { display: flex; justify-content: space-between; font: 400 11px var(--font-num); color: var(--ink-2); }
+.asof { margin: 10px 0 0; font-size: 11px; color: var(--ink-3); }
+.skel { height: 14px; border-radius: 4px; background: var(--rule-2); margin: 10px 0; }
+
+.toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 60; padding: 9px 16px; border-radius: 9px; background: var(--ink); color: var(--surface); font-size: 13px; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); max-width: calc(100vw - 32px); }
+
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.toast-act { margin-left: 14px; border: 0; background: none; color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; padding: 0; }
+
+/* ---------- trades on a card ---------- */
+.mk-key { margin-right: auto; display: inline-flex; gap: 14px; align-items: center; font-size: 12px; color: var(--ink-2); }
+.mk-key i { display: inline-block; width: 0; height: 0; margin-right: 5px; border-left: 5px solid transparent; border-right: 5px solid transparent; vertical-align: 1px; }
+.mk-key .b i { border-bottom: 8px solid var(--up); }
+.mk-key .s i { border-top: 8px solid var(--down); }
+.trades { margin-top: 10px; padding: 12px; border: 1px solid var(--rule-2); border-radius: 10px; background: var(--bg); }
+.tform { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; align-items: end; }
+.tform label, .tform .fld { display: flex; flex-direction: column; gap: 4px; min-width: 0; font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.tform input[type="text"], .tform input[type="date"], .tform input[type="number"] {
+  width: 100%; min-width: 0; height: 34px; padding: 0 9px; border: 1px solid var(--rule); border-radius: 8px;
+  background: var(--surface); color: var(--ink); font: 400 13px var(--font-num); text-transform: none; letter-spacing: 0;
+}
+.tform .curtag { color: var(--ink-2); }
+.tform .seg { align-self: start; }
+.tform .seg label { position: relative; flex-direction: row; gap: 0; font: 500 13px var(--font-ui); letter-spacing: 0; text-transform: none; color: var(--ink-2); }
+.seg { display: inline-flex; padding: 2px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+.seg input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.seg span, .seg button { display: block; height: 28px; padding: 0 14px; border: 0; border-radius: 6px; background: none; line-height: 28px; font: 500 13px/28px var(--font-ui); color: var(--ink-2); }
+.seg input[value="buy"]:checked + span { background: var(--up); color: var(--surface); }
+.seg input[value="sell"]:checked + span { background: var(--down); color: var(--surface); }
+.seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.form-err { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--down); }
+.tlist { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; }
+.tlist li { display: flex; align-items: center; gap: 10px; padding: 5px 2px; border-top: 1px solid var(--rule-2); font: 400 12px var(--font-num); }
+.tlist li.none { border-top: 0; padding: 0; color: var(--ink-3); font-family: var(--font-ui); }
+.tlist .when { margin-left: auto; color: var(--ink-3); }
+.tside { display: inline-block; padding: 1px 7px; border-radius: 4px; font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; }
+.tside.buy { color: var(--up); background: color-mix(in srgb, var(--up) 13%, transparent); }
+.tside.sell { color: var(--down); background: color-mix(in srgb, var(--down) 13%, transparent); }
+.facts dl > div.grp { display: block; padding-top: 14px; border-top: 0; font: 600 11px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.facts dd .sub { display: block; font-size: 11px; color: var(--ink-3); }
+.tip .t-cur { font: 400 11px var(--font-ui); color: var(--ink-3); }
+.tip .t-trade .t-sub { font: 400 11px var(--font-ui); color: var(--ink-3); display: block; margin-bottom: 2px; }
+.tip.ftip { position: fixed; top: auto; z-index: 60; min-width: 200px; max-width: min(280px, calc(100vw - 16px)); }
+.tip .t-trade .t-row { white-space: nowrap; }
+.tip.ftip .t-trade { margin-top: 0; padding-top: 0; border-top: 0; }
+.tbl tbody tr[data-tid] { cursor: default; }
+.tbl tbody tr[data-tid]:hover td, .tbl tbody tr[data-tid]:focus-visible td { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.tbl tbody tr[data-tid]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tip .t-trade{ margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--rule-2); }
+.tip .t-trade > b { font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; }
+.tip .t-trade.buy > b { color: var(--up); }
+.tip .t-trade.sell > b { color: var(--down); }
+
+/* ---------- portfolio ---------- */
+.app[data-view="portfolio"] .add { display: none; }
+.view-head .seg { margin-left: auto; }
+.port { display: flex; flex-direction: column; gap: 16px; max-width: 1180px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.tile { min-width: 0; padding: 14px 16px; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow); }
+.tile .k { font: 600 11px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.tile .big { margin-top: 6px; font: 500 26px/1.15 var(--font-num); letter-spacing: -.01em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tile .sub { margin-top: 6px; font: 400 12px/1.5 var(--font-num); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.pcard { min-width: 0; padding: 14px 16px 16px; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; box-shadow: var(--shadow); }
+.pc-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.pc-head h2 { margin: 0 auto 0 0; font: 600 15px var(--font-ui); }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; margin-bottom: 4px; font-size: 12px; color: var(--ink-2); }
+.legend i { display: inline-block; width: 18px; height: 0; margin-right: 7px; border-top: 2px solid var(--accent); vertical-align: 3px; }
+.legend i.dash { border-top: 2px dashed var(--ink-3); }
+.pchart { position: relative; height: 320px; touch-action: pan-y; cursor: crosshair; user-select: none; -webkit-user-select: none; }
+.pchart svg { position: absolute; left: 0; top: 0; display: block; width: 100%; height: 100%; overflow: visible; }
+.pchart text { font: 400 11px var(--font-num); fill: var(--ink-3); }
+.pchart .ph { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-3); cursor: default; text-align: center; padding: 0 16px; }
+.pchart .tablewrap { cursor: auto; }
+.tbl-scroll { position: relative; overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font: 400 13px var(--font-num); font-variant-numeric: tabular-nums; }
+.tbl th { padding: 8px 10px; border-bottom: 1px solid var(--rule); text-align: right; white-space: nowrap; font: 600 11px var(--font-ui); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.tbl td { padding: 9px 10px; border-bottom: 1px solid var(--rule-2); text-align: right; white-space: nowrap; vertical-align: top; }
+.tbl th:first-child, .tbl td:first-child { text-align: left; }
+.tbl .sym-cell b { font: 600 14px var(--font-ui); }
+.tbl .sym-cell small { display: block; max-width: 190px; overflow: hidden; text-overflow: ellipsis; font: 400 11px var(--font-ui); color: var(--ink-3); }
+.tbl .sub { display: block; font-size: 11px; color: var(--ink-3); }
+.wbar { position: relative; display: inline-block; width: 46px; height: 4px; margin-left: 8px; overflow: hidden; border-radius: 2px; background: var(--rule); vertical-align: middle; }
+.wbar i { position: absolute; inset: 0 auto 0 0; background: var(--accent); }
+.p-note { margin: 0 0 6px; padding: 8px 12px; border-radius: 8px; background: color-mix(in srgb, var(--down) 10%, transparent); font-size: 13px; }
+.p-empty { padding: 28px 24px; text-align: center; background: var(--surface); border: 1px dashed var(--rule); border-radius: 12px; color: var(--ink-2); }
+.p-empty h2 { margin: 0 0 6px; font: 600 16px var(--font-ui); color: var(--ink); }
+.p-empty p { margin: 0 auto; max-width: 520px; }
+.muted { color: var(--ink-3); }
+
+@media (max-width: 900px) {
+  .tile .big { font-size: 22px; }
+  .pchart { height: 280px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---------- narrow screens ---------- */
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .top { flex-wrap: wrap; padding: 10px 16px; gap: 10px; }
+  .add { order: 3; flex-basis: 100%; max-width: none; }
+  .add kbd { display: none; }
+  .rail { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--rule); }
+  .rail section { display: contents; }
+  .rail h3 { display: none; }
+  .rail ul { display: contents; }
+  .rail li { flex: none; }
+  .rail .nav { padding: 0 12px; flex: none; }
+  .rail .nav-name { max-width: 140px; }
+  .rail .confirm, .rail form.inline { flex: 1 1 220px; }
+  .rail-foot { margin: 0; flex: 1 1 100%; flex-direction: row; gap: 14px; }
+  .rail-foot .row { margin-left: 0; }
+  .folder-hint { display: none; }
+  .new-folder { width: auto; margin: 0; white-space: nowrap; }
+  .nav-actions { position: static; display: flex; background: none; }
+  main { padding: 16px 16px 40px; }
+  .board { grid-template-columns: minmax(0, 1fr); }
+  .status .when { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app" data-view="board">
+  <header class="top">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 16l5-6 4 3 7-8"/><path d="M3 20h16" opacity=".4"/></svg>
+      Ticker Board
+    </div>
+    <form class="add" id="addForm" autocomplete="off" role="search">
+      <div class="field">
+        <svg class="ico" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+        <input id="symInput" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sugg" aria-label="Add tickers" placeholder="Add tickers, e.g. AAPL, TSLA, ^GSPC, BTC-USD" spellcheck="false" autocapitalize="characters">
+        <kbd aria-hidden="true">/</kbd>
+        <ul class="sugg" id="sugg" role="listbox" hidden></ul>
+      </div>
+      <button class="btn primary" type="submit">Add</button>
+    </form>
+    <div class="status">
+      <span class="when" id="updated" aria-live="polite"></span>
+      <button class="icon-btn" id="refreshAll" type="button" title="Refresh all now" aria-label="Refresh all"></button>
+    </div>
+  </header>
+
+  <nav class="rail" aria-label="Folders">
+    <section>
+      <h3>Screen</h3>
+      <ul id="viewList"></ul>
+    </section>
+    <section>
+      <h3>Folders</h3>
+      <ul id="folderList"></ul>
+      <div id="newFolderSlot"></div>
+      <p class="folder-hint" id="folderHint">Use the folder button on any chart to save it to a folder.</p>
+    </section>
+    <div class="rail-foot">
+      <p class="warn-text" id="saveWarn" role="status" hidden></p>
+      <div class="row">
+        <button class="link" id="exportBtn" type="button">Export</button>
+        <button class="link" id="importBtn" type="button">Import</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+  </nav>
+
+  <main>
+    <div class="view-head">
+      <h1 id="viewTitle"></h1>
+      <p id="viewSub"></p>
+      <div class="seg" id="curSeg" role="group" aria-label="Display currency" hidden>
+        <button type="button" data-cur="CAD">CAD</button><button type="button" data-cur="USD">USD</button>
+      </div>
+    </div>
+    <div class="board" id="board"></div>
+    <section class="port" id="portfolio" hidden></section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------------- constants ---------------- */
+const STORE_KEY = 'tickerboard.v1';
+const RANGES = [
+  { key: '1D',  range: '1d',  interval: '5m'  },
+  { key: '5D',  range: '5d',  interval: '15m' },
+  { key: '1M',  range: '1mo', interval: '1d'  },
+  { key: '6M',  range: '6mo', interval: '1d'  },
+  { key: 'YTD', range: 'ytd', interval: '1d'  },
+  { key: '1Y',  range: '1y',  interval: '1d'  },
+  { key: '5Y',  range: '5y',  interval: '1wk' },
+  { key: 'Max', range: 'max', interval: '1mo' },
+];
+const DEFAULT_RANGE = '6M';
+const STARTER = ['AAPL', 'MSFT', 'NVDA'];
+const SUGGESTED = ['AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'SPY', '^GSPC', 'BTC-USD'];
+const REFRESH_MS = 60000;
+const STALE_MS = 30000;
+const SYM_RE = /^[A-Z0-9.\-^=]{1,15}$/;
+const DAY = 864e5;
+const FILE_MODE = location.protocol === 'file:';
+const PORT_RANGES = ['1M', '6M', 'YTD', '1Y', 'All'];
+const CUR_PREFIX = { USD: 'US$', CAD: 'C$' };
+
+/* ---------------- helpers ---------------- */
+const $ = (sel, root = document) => root.querySelector(sel);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const ICONS = {
+  folderPlus: '<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.4 1.5h5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/><path d="M8 7v3M6.5 8.5h3"/>',
+  folder: '<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.4 1.5h5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>',
+  grid: '<rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1"/><rect x="9" y="9" width="4.5" height="4.5" rx="1"/>',
+  x: '<path d="M4 4l8 8M12 4l-8 8"/>',
+  plus: '<path d="M8 3v10M3 8h10"/>',
+  pencil: '<path d="M3 13l.6-2.8 7.1-7.1a1.4 1.4 0 0 1 2 2l-7.1 7.1z"/>',
+  trash: '<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8h5.8l.6-8"/>',
+  check: '<path d="M3.5 8.5l3 3 6-7"/>',
+  refresh: '<path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3"/>',
+  pie: '<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5V8h5.5"/>',
+  grip: '<path d="M5.5 3.5h.01M10.5 3.5h.01M5.5 8h.01M10.5 8h.01M5.5 12.5h.01M10.5 12.5h.01" stroke-width="2.4"/>',
+};
+const icon = (n, sz = 16) => `<svg class="ico" width="${sz}" height="${sz}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
+
+const nfCache = {};
+const nf = (min, max) => nfCache[min + '-' + max] || (nfCache[min + '-' + max] = new Intl.NumberFormat('en-US', { minimumFractionDigits: min, maximumFractionDigits: max }));
+const fmtPrice = v => (v == null || !isFinite(v)) ? '—' : (Math.abs(v) >= 1 ? nf(2, 2) : nf(2, 5)).format(v);
+const sign = v => v > 0 ? '+' : v < 0 ? '−' : '';
+/* Changes follow the price's precision: two decimals above 1.00, up to five for sub-dollar prices. */
+const fmtSigned = (v, ref) => sign(v) + (ref != null && Math.abs(ref) >= 1 ? nf(2, 2).format(Math.abs(v)) : fmtPrice(Math.abs(v)));
+const fmtPct = v => sign(v) + nf(2, 2).format(Math.abs(v)) + '%';
+const compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 });
+const fmtVol = v => v ? compact.format(v) : '—';
+const dir = v => v > 0 ? 'up' : v < 0 ? 'down' : '';
+const arrow = v => v > 0 ? '▲' : v < 0 ? '▼' : '•';
+const money = (v, cur, signed) => {
+  if (v == null || !isFinite(v)) return '—';
+  const r = Math.round(v * 100) / 100;
+  const s = signed ? sign(r) : (r < 0 ? '−' : '');
+  return s + (CUR_PREFIX[cur] || (cur ? cur + ' ' : '')) + nf(2, 2).format(Math.abs(r));
+};
+
+const dtfCache = {};
+function dtf(tz, opts) {
+  const k = tz + JSON.stringify(opts);
+  if (!dtfCache[k]) {
+    try { dtfCache[k] = new Intl.DateTimeFormat('en-US', { ...opts, timeZone: tz || undefined }); }
+    catch { dtfCache[k] = new Intl.DateTimeFormat('en-US', opts); }
+  }
+  return dtfCache[k];
+}
+function tickOpts(span) {
+  if (span <= 2 * DAY) return { hour: 'numeric', minute: '2-digit' };
+  if (span <= 9 * DAY) return { weekday: 'short', hour: 'numeric' };
+  if (span <= 400 * DAY) return { month: 'short', day: 'numeric' };
+  return { month: 'short', year: 'numeric' };
+}
+const TIP_INTRADAY = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+const TIP_DAILY = { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
+
+function niceTicks(min, max, n) {
+  const raw = (max - min) / Math.max(1, n);
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag;
+  const ticks = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + step * 1e-9; v += step) ticks.push(+v.toFixed(10));
+  return { ticks, decimals: Math.max(0, Math.ceil(-Math.log10(step) + 1e-9)) };
+}
+
+/* ---------------- saved state ---------------- */
+const isSym = s => typeof s === 'string' && SYM_RE.test(s.toUpperCase());
+const cleanList = a => [...new Set((Array.isArray(a) ? a : []).filter(isSym).map(s => s.toUpperCase()))];
+const defaultState = () => ({ activeId: 'scratch', scratch: [...STARTER], folders: [], ranges: {}, trades: [], cur: 'CAD', portRange: 'All' });
+const cleanTrade = t => {
+  if (!t || typeof t !== 'object') return null;
+  const sym = String(t.sym || '').toUpperCase(), price = Number(t.price), qty = Number(t.qty);
+  if (!SYM_RE.test(sym) || !(price > 0) || !(qty > 0) || !isFinite(price) || !isFinite(qty)) return null;
+  if (t.side !== 'buy' && t.side !== 'sell') return null;
+  if (typeof t.date !== 'string' || !validDate(t.date)) return null;
+  return { id: typeof t.id === 'string' && t.id ? t.id.slice(0, 40) : uid(), sym, side: t.side, date: t.date, price, qty, cur: /^[A-Za-z]{3,4}$/.test(t.cur || '') ? t.cur : 'USD' };
+};
+
+function sanitize(s) {
+  const out = { activeId: 'scratch', scratch: [], folders: [], ranges: {}, trades: [], cur: 'CAD', portRange: 'All' };
+  if (!s || typeof s !== 'object') return defaultState();
+  out.scratch = cleanList(s.scratch);
+  if (Array.isArray(s.folders)) {
+    out.folders = s.folders
+      .filter(f => f && typeof f.id === 'string' && typeof f.name === 'string')
+      .map(f => ({ id: f.id, name: f.name.trim().slice(0, 40) || 'Untitled', tickers: cleanList(f.tickers) }));
+  }
+  if (s.ranges && typeof s.ranges === 'object') {
+    for (const k of Object.keys(s.ranges)) {
+      if (isSym(k) && RANGES.some(r => r.key === s.ranges[k])) out.ranges[k.toUpperCase()] = s.ranges[k];
+    }
+  }
+  const seen = new Set();
+  for (const raw of (Array.isArray(s.trades) ? s.trades : []).slice(0, 5000)) {
+    const t = cleanTrade(raw);
+    if (!t) continue;
+    if (seen.has(t.id)) t.id = uid();
+    seen.add(t.id); out.trades.push(t);
+  }
+  out.cur = s.cur === 'USD' ? 'USD' : 'CAD';
+  out.portRange = PORT_RANGES.includes(s.portRange) ? s.portRange : 'All';
+  if (s.activeId === 'scratch' || s.activeId === 'portfolio' || out.folders.some(f => f.id === s.activeId)) out.activeId = s.activeId;
+  return out;
+}
+function readBrowserState() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) return sanitize(JSON.parse(raw));
+  } catch (e) { /* nothing usable */ }
+  return null;
+}
+/* The server keeps the data in a file on the host. The browser copy is only
+   used when the page is opened without the server (file://), or to carry old
+   browser-only data over to the server once. */
+let state = defaultState();
+let useBrowserStorage = false;
+let saveChain = Promise.resolve();
+function showSaveWarn(msg) {
+  const w = $('#saveWarn');
+  w.hidden = !msg; w.textContent = msg || '';
+}
+function save() {
+  if (useBrowserStorage) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); showSaveWarn(''); }
+    catch (e) { showSaveWarn('Browser storage is blocked, so changes won’t be kept. Export a backup.'); }
+    return;
+  }
+  const body = JSON.stringify(state);
+  saveChain = saveChain.then(() => fetch('/api/state', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body, keepalive: body.length < 60000,
+  })).then(res => {
+    showSaveWarn(res.ok ? '' : 'Couldn’t save to the server. Check that server.py is running.');
+  }).catch(() => showSaveWarn('Couldn’t save to the server. Check that server.py is running.'));
+}
+async function loadState() {
+  if (!FILE_MODE) {
+    try {
+      const res = await fetch('/api/state');
+      if (res.ok) {
+        const { state: saved } = await res.json();
+        if (saved) { state = sanitize(saved); return; }
+        const old = readBrowserState();          // first run on this server: bring old browser data across
+        state = old || defaultState();
+        save();
+        if (old) toast('Moved your saved folders from the browser to this computer');
+        return;
+      }
+    } catch (e) { /* server not reachable: fall back below */ }
+  }
+  useBrowserStorage = true;
+  state = readBrowserState() || defaultState();
+  if (FILE_MODE) showSaveWarn('Opened without the server, so data is kept in this browser only. Run server.py to save on this computer.');
+}
+
+const currentView = () => state.activeId === 'portfolio'
+  ? { id: 'portfolio', name: 'Portfolio', tickers: [] }
+  : state.activeId === 'scratch'
+  ? { id: 'scratch', name: 'Scratchpad', tickers: state.scratch }
+  : state.folders.find(f => f.id === state.activeId) || { id: 'scratch', name: 'Scratchpad', tickers: state.scratch };
+
+/* ---------------- data ---------------- */
+async function getJSON(url) {
+  let res;
+  try { res = await fetch(url); }
+  catch (e) {
+    throw new Error(FILE_MODE
+      ? 'Open Ticker Board through its server: run “python3 server.py”, then visit http://localhost:8000'
+      : 'Can’t reach the Ticker Board server. Check that server.py is still running.');
+  }
+  let body = null;
+  try { body = await res.json(); } catch (e) { /* not json */ }
+  if (!res.ok) {
+    const desc = body && body.chart && body.chart.error && body.chart.error.description;
+    if (res.status === 404) throw new Error(desc || 'Symbol not found');
+    if (res.status === 429) throw new Error('The data source is limiting requests. Try again in a minute.');
+    throw new Error(desc || `The data source returned an error (${res.status}).`);
+  }
+  return body;
+}
+const chartURL = (sym, range, interval) => FILE_MODE
+  ? `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}`
+  : `/api/chart?symbol=${encodeURIComponent(sym)}&range=${range}&interval=${interval}`;
+
+function parseChart(json) {
+  const res = json && json.chart && json.chart.result && json.chart.result[0];
+  if (!res) {
+    const e = json && json.chart && json.chart.error;
+    throw new Error((e && e.description) || 'No data returned for this symbol.');
+  }
+  const q = (res.indicators && res.indicators.quote && res.indicators.quote[0]) || {};
+  const ts = res.timestamp || [];
+  const points = [];
+  for (let i = 0; i < ts.length; i++) {
+    const c = q.close && q.close[i];
+    if (c == null || !isFinite(c)) continue;
+    points.push({ t: ts[i] * 1000, c, v: (q.volume && q.volume[i]) || 0 });
+  }
+  return { meta: res.meta || {}, points };
+}
+
+function buildQuote(meta, daily) {
+  const gmt = (meta.gmtoffset || 0) * 1000;
+  const dayKey = ms => new Date(ms + gmt).toISOString().slice(0, 10);
+  let prev = meta.chartPreviousClose != null ? meta.chartPreviousClose : null;
+  if (daily.length >= 2) {
+    const lastDay = dayKey(daily[daily.length - 1].t);
+    const mktDay = meta.regularMarketTime ? dayKey(meta.regularMarketTime * 1000) : lastDay;
+    prev = lastDay === mktDay ? daily[daily.length - 2].c : daily[daily.length - 1].c;
+  }
+  const price = meta.regularMarketPrice != null ? meta.regularMarketPrice : (daily.length ? daily[daily.length - 1].c : null);
+  const change = prev != null && price != null ? price - prev : null;
+  const reg = meta.currentTradingPeriod && meta.currentTradingPeriod.regular;
+  const nowS = Date.now() / 1000;
+  return {
+    price, prev, change,
+    pct: change != null && prev ? change / prev * 100 : null,
+    dayHigh: meta.regularMarketDayHigh, dayLow: meta.regularMarketDayLow,
+    vol: meta.regularMarketVolume,
+    high52: meta.fiftyTwoWeekHigh, low52: meta.fiftyTwoWeekLow,
+    name: meta.longName || meta.shortName || '',
+    currency: meta.currency || '',
+    exchange: meta.fullExchangeName || meta.exchangeName || '',
+    tz: meta.exchangeTimezoneName || '',
+    time: meta.regularMarketTime ? meta.regularMarketTime * 1000 : null,
+    open: reg ? nowS >= reg.start && nowS <= reg.end : null,
+  };
+}
+
+/* ---------------- price history + exchange rates ---------------- */
+const seriesCache = new Map();
+function loadSeries(sym, range, interval = '1d', maxAge = STALE_MS) {
+  const k = `${sym}|${range}|${interval}`, hit = seriesCache.get(k);
+  if (hit && Date.now() - hit.at < maxAge) return hit.p;
+  const p = getJSON(chartURL(sym, range, interval)).then(parseChart);
+  const rec = { at: Date.now(), p };
+  seriesCache.set(k, rec);
+  p.catch(() => { if (seriesCache.get(k) === rec) seriesCache.delete(k); });
+  return p;
+}
+const dayKeyFn = meta => { const gmt = (meta.gmtoffset || 0) * 1000; return ms => new Date(ms + gmt).toISOString().slice(0, 10); };
+function toKeyed(parsed) {                       // one value per calendar day (the last one wins)
+  const dk = dayKeyFn(parsed.meta), keys = [], vals = [];
+  for (const p of parsed.points) {
+    const k = dk(p.t);
+    if (keys.length && keys[keys.length - 1] === k) vals[vals.length - 1] = p.c; else { keys.push(k); vals.push(p.c); }
+  }
+  return { keys, vals };
+}
+/* How Yahoo quotes the rate that turns one unit of `cur` into US dollars. */
+const fxPair = cur => cur === 'CAD' ? { sym: 'CAD=X', invert: true, scale: 1 }
+  : cur === 'GBp' ? { sym: 'GBPUSD=X', invert: false, scale: 0.01 }
+  : { sym: `${cur}USD=X`, invert: false, scale: 1 };
+async function usdPerSeries(cur, range) {        // history of "USD per 1 cur"
+  const pair = fxPair(cur);
+  const keyed = toKeyed(await loadSeries(pair.sym, range));
+  if (!keyed.keys.length) throw new Error('no rate');
+  keyed.vals = keyed.vals.map(v => (pair.invert ? 1 / v : v) * pair.scale);
+  return keyed;
+}
+async function usdPerStamped(cur, range, interval) {      // "USD per 1 cur", with a timestamp for every point
+  const pair = fxPair(cur);
+  const parsed = await loadSeries(pair.sym, range, interval);
+  if (!parsed.points.length) throw new Error('no rate');
+  return { ts: parsed.points.map(p => p.t), vals: parsed.points.map(p => (pair.invert ? 1 / p.c : p.c) * pair.scale) };
+}
+/* Returns t -> how many `to` one unit of `from` was worth at time t. */
+async function fxFactorFn(from, to, range, interval) {
+  const series = {};
+  await Promise.all([from, to].filter(c => c !== 'USD').map(async c => { series[c] = await usdPerStamped(c, range, interval); }));
+  const at = (cur, t) => {
+    if (cur === 'USD') return 1;
+    const s = series[cur];
+    let lo = 0, hi = s.ts.length - 1, a = -1;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (s.ts[m] <= t) { a = m; lo = m + 1; } else hi = m - 1; }
+    return s.vals[a < 0 ? 0 : a];
+  };
+  return t => at(from, t) / at(to, t);
+}
+async function dailyUsdPer(cur, range) {                  // 'YYYY-MM-DD' -> USD per 1 cur
+  if (cur === 'USD') return () => 1;
+  const s = await usdPerSeries(cur, range);
+  return d => { const i = lastLE(s.keys, d); return s.vals[i < 0 ? 0 : i]; };
+}
+const latestRate = { USD: 1 };                   // USD per 1 unit of each currency we have seen
+const wantRates = new Set(['CAD']);
+let ratesTimer = 0;
+function noteCurrency(cur) {
+  if (cur) wantRates.add(cur);
+  clearTimeout(ratesTimer);
+  ratesTimer = setTimeout(refreshRates, 40);
+}
+async function refreshRates() {
+  let changed = false;
+  await Promise.all([...wantRates].filter(c => c !== 'USD').map(async c => {
+    try {
+      const s = await usdPerSeries(c, '5d');
+      const v = s.vals[s.vals.length - 1];
+      if (v !== latestRate[c]) { latestRate[c] = v; changed = true; }
+    } catch (e) { /* leave this currency unconverted */ }
+  }));
+  if (changed) for (const c of cards.values()) if (c.data) c.renderFacts();
+}
+const convert = (v, from, to) => {
+  if (v == null || !from) return null;
+  if (from === to) return v;
+  const a = latestRate[from], b = latestRate[to];
+  return a == null || b == null ? null : v * a / b;
+};
+
+/* ---------------- toast ---------------- */
+let toastTimer = 0;
+function toast(msg, action) {
+  const t = $('#toast');
+  t.textContent = msg;
+  if (action) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'toast-act'; b.textContent = action.label;
+    b.addEventListener('click', () => { t.hidden = true; action.run(); });
+    t.append(b);
+  }
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, action ? 6500 : 2800);
+}
+
+/* ---------------- cards ---------------- */
+const cards = new Map();
+let openMenuCard = null;
+let lastUpdated = 0;
+
+class Card {
+  constructor(sym) {
+    this.sym = sym;
+    this.data = null; this.quote = null; this.err = null;
+    this.loading = true; this.started = false; this.zoom = null; this.fetchedAt = 0; this.token = 0;
+    this.table = false; this.geo = null; this.drag = null;
+    this.raw = null; this.convToken = 0; this.tfn = null;
+    this.gid = 'g' + sym.replace(/[^A-Za-z0-9]/g, '_');
+
+    const el = this.el = document.createElement('article');
+    el.className = 'card';
+    el.dataset.sym = sym;
+    el.innerHTML = `
+      <header class="card-head">
+        <button class="grip js-grip" type="button" aria-label="Reorder ${esc(sym)}" title="Drag to reorder, or focus and use the arrow keys">${icon('grip')}</button>
+        <div class="id"><h2 class="sym">${esc(sym)}</h2><span class="name"></span></div>
+        <span class="mkt" hidden></span>
+        <div class="tools">
+          <div class="menu-wrap">
+            <button class="icon-btn js-folders" type="button" aria-haspopup="true" aria-expanded="false">${icon('folderPlus')}<span class="badge" hidden></span></button>
+            <div class="menu" hidden></div>
+          </div>
+          <button class="icon-btn js-remove" type="button">${icon('x')}</button>
+        </div>
+      </header>
+      <div class="card-body">
+        <section class="plot">
+          <div class="plot-bar">
+            <div class="ranges" role="group" aria-label="Time range for ${esc(sym)}"></div>
+          </div>
+          <div class="chart"></div>
+          <div class="tablewrap" hidden></div>
+          <div class="plot-foot">
+            <span class="mk-key" hidden><span class="b"><i></i>Buy</span><span class="s"><i></i>Sell</span></span>
+            <button class="link js-reset" type="button" hidden>Reset zoom</button>
+            <button class="link js-trade" type="button" aria-expanded="false">Log trade</button>
+            <button class="link js-table" type="button">Table</button>
+          </div>
+          <div class="trades" hidden></div>
+          <p class="note" role="status" hidden></p>
+        </section>
+        <aside class="facts" aria-label="${esc(sym)} quote details"></aside>
+      </div>`;
+    this.nameEl = $('.name', el);
+    this.mktEl = $('.mkt', el);
+    this.chartEl = $('.chart', el);
+    this.tableEl = $('.tablewrap', el);
+    this.factsEl = $('.facts', el);
+    this.noteEl = $('.note', el);
+    this.resetBtn = $('.js-reset', el);
+    this.tableBtn = $('.js-table', el);
+    this.foldersBtn = $('.js-folders', el);
+    this.removeBtn = $('.js-remove', el);
+    this.menuEl = $('.menu', el);
+    this.menuWrap = $('.menu-wrap', el);
+    this.keyEl = $('.mk-key', el);
+    this.tradeBtn = $('.js-trade', el);
+    this.tradesEl = $('.trades', el);
+    this.marks = [];
+
+    const rangesEl = $('.ranges', el);
+    for (const r of RANGES) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'rng'; b.textContent = r.key; b.dataset.key = r.key;
+      b.addEventListener('click', () => this.setRange(r.key));
+      rangesEl.append(b);
+    }
+    this.syncRanges();
+    this.bind();
+    this.renderChartState();
+    this.renderFacts();
+    new ResizeObserver(() => { if (el.isConnected) this.drawChart(); }).observe(this.chartEl);
+  }
+
+  get rangeKey() { return state.ranges[this.sym] || DEFAULT_RANGE; }
+  get rangeDef() { return RANGES.find(r => r.key === this.rangeKey) || RANGES[3]; }
+  get intraday() { return /m$/.test(this.rangeDef.interval) && this.rangeDef.interval !== '1mo'; }
+
+  syncRanges() {
+    for (const b of this.el.querySelectorAll('.rng')) b.setAttribute('aria-pressed', String(b.dataset.key === this.rangeKey));
+  }
+
+  syncChrome() {
+    const inScratch = state.activeId === 'scratch';
+    const label = inScratch ? `Remove ${this.sym} from screen` : `Remove ${this.sym} from this folder`;
+    this.removeBtn.title = label; this.removeBtn.setAttribute('aria-label', label);
+    const memberOf = state.folders.filter(f => f.tickers.includes(this.sym));
+    const badge = $('.badge', this.foldersBtn);
+    badge.hidden = !memberOf.length; badge.textContent = memberOf.length;
+    const fl = memberOf.length ? `Saved in: ${memberOf.map(f => f.name).join(', ')}` : 'Save to a folder';
+    this.foldersBtn.title = fl; this.foldersBtn.setAttribute('aria-label', fl);
+    if (!this.menuEl.hidden) this.renderMenu();
+  }
+
+  /* ----- events ----- */
+  bind() {
+    const grip = $('.js-grip', this.el);
+    grip.addEventListener('pointerdown', e => startReorder(this, e));
+    grip.addEventListener('keydown', e => {
+      const back = e.key === 'ArrowUp' || e.key === 'ArrowLeft', fwd = e.key === 'ArrowDown' || e.key === 'ArrowRight';
+      if (!back && !fwd) return;
+      e.preventDefault();
+      const sib = back ? this.el.previousElementSibling : this.el.nextElementSibling;
+      if (!sib || !sib.classList.contains('card')) return;
+      back ? sib.before(this.el) : sib.after(this.el);
+      grip.focus();
+      persistOrder();
+      const all = [...boardEl.querySelectorAll('.card')];
+      toast(`${this.sym} moved to position ${all.indexOf(this.el) + 1} of ${all.length}`);
+    });
+    this.removeBtn.addEventListener('click', () => removeTicker(this.sym));
+    this.tradeBtn.addEventListener('click', () => this.toggleTrades());
+    this.tradesEl.addEventListener('click', e => { const b = e.target.closest('[data-del]'); if (b) deleteTrade(b.dataset.del); });
+    this.foldersBtn.addEventListener('click', () => this.toggleMenu());
+    this.resetBtn.addEventListener('click', () => this.resetZoom());
+    this.tableBtn.addEventListener('click', () => {
+      this.table = !this.table;
+      this.tableBtn.textContent = this.table ? 'Chart' : 'Table';
+      this.chartEl.hidden = this.table; this.tableEl.hidden = !this.table;
+      if (this.table) this.renderTable(); else this.drawChart();
+    });
+
+    const c = this.chartEl;
+    const xOf = e => e.clientX - c.getBoundingClientRect().left;
+    const idxOf = x => {
+      const g = this.geo;
+      return Math.max(g.i0, Math.min(g.i1, Math.round(g.i0 + (x - g.m.l) / g.pw * (g.i1 - g.i0))));
+    };
+    c.addEventListener('pointermove', e => {
+      if (!this.geo) return;
+      const x = xOf(e);
+      if (this.drag) this.updateDrag(x);
+      this.showHover(idxOf(x));
+    });
+    c.addEventListener('pointerleave', () => { if (!this.drag) this.hideHover(); });
+    c.addEventListener('pointerdown', e => {
+      if (!this.geo || e.button !== 0 || e.pointerType === 'touch') return;
+      this.drag = { x0: xOf(e), x1: xOf(e) };
+      try { c.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    });
+    c.addEventListener('pointerup', e => {
+      if (!this.drag) return;
+      const d = this.drag; this.drag = null;
+      this.selEl.style.display = 'none';
+      try { c.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      const x1 = xOf(e);
+      if (Math.abs(x1 - d.x0) < 8) return;
+      let a = idxOf(d.x0), b = idxOf(x1);
+      if (a > b) [a, b] = [b, a];
+      if (b - a < 2) return;
+      this.zoom = [a, b];
+      this.afterWindowChange();
+    });
+    c.addEventListener('pointercancel', () => { this.drag = null; if (this.selEl) this.selEl.style.display = 'none'; });
+    c.addEventListener('dblclick', () => this.resetZoom());
+  }
+
+  updateDrag(x) {
+    const g = this.geo;
+    this.drag.x1 = x;
+    const a = Math.max(g.m.l, Math.min(g.m.l + g.pw, Math.min(this.drag.x0, x)));
+    const b = Math.max(g.m.l, Math.min(g.m.l + g.pw, Math.max(this.drag.x0, x)));
+    this.selEl.setAttribute('x', a); this.selEl.setAttribute('width', b - a);
+    this.selEl.style.display = '';
+  }
+
+  /* ----- data ----- */
+  async setRange(key) {
+    if (key === this.rangeKey && this.data) return;
+    state.ranges[this.sym] = key; save();
+    this.zoom = null; this.syncRanges();
+    await this.load();
+  }
+
+  async load() {
+    const token = ++this.token;
+    const hadData = !!this.data;
+    this.err = null;
+    if (!hadData) { this.loading = true; this.renderChartState(); }
+    this.el.setAttribute('aria-busy', 'true');
+    try {
+      const r = this.rangeDef;
+      const [chart, daily] = await Promise.all([
+        getJSON(chartURL(this.sym, r.range, r.interval)).then(parseChart),
+        getJSON(chartURL(this.sym, '5d', '1d')).then(parseChart),
+      ]);
+      if (token !== this.token) return;
+      if (!chart.points.length) throw new Error(`No price data for ${this.rangeKey} yet. Try a longer range.`);
+      this.raw = { chart, daily, rangeKey: this.rangeKey };
+      this.noteEl.hidden = true;
+      await this.applyCurrency();
+      if (token !== this.token) return;
+      if (this.zoom && this.zoom[1] >= chart.points.length) this.zoom = null;
+      this.fetchedAt = Date.now(); lastUpdated = this.fetchedAt;
+    } catch (e) {
+      if (token !== this.token) return;
+      this.err = e.message || 'Something went wrong.';
+      if (hadData) { this.noteEl.textContent = 'Couldn’t refresh: ' + this.err; this.noteEl.hidden = false; }
+    }
+    this.loading = false;
+    this.el.removeAttribute('aria-busy');
+    this.render();
+    renderUpdated();
+  }
+
+  /* Turns the downloaded prices into the display currency (CAD or USD). Every
+     point uses the exchange rate from its own moment, so history stays honest. */
+  async applyCurrency() {
+    const raw = this.raw;
+    if (!raw) return;
+    const ct = ++this.convToken;
+    const r = RANGES.find(x => x.key === raw.rangeKey) || this.rangeDef;
+    const native = raw.chart.meta.currency || raw.daily.meta.currency || 'USD';
+    const want = state.cur;
+    let fn = null, fc = 1, show = want, note = '';
+    if (native !== want) {
+      try { fn = await fxFactorFn(native, want, r.range, r.interval); } catch (e) { fn = null; }
+      if (!fn) {
+        const c = convert(1, native, want);
+        if (c != null) fc = c;
+        else { show = native; note = `Couldn’t load the ${native}/${want} exchange rate, so prices are shown in ${native}.`; }
+      }
+    }
+    if (ct !== this.convToken) return;
+    const pts = raw.chart.points.map(p => { const f = fn ? fn(p.t) : fc; return { t: p.t, c: p.c * f, n: p.c, v: p.v, f }; });
+    const f = pts[pts.length - 1].f;
+    const q = buildQuote(raw.daily.meta.regularMarketPrice != null ? raw.daily.meta : raw.chart.meta, raw.daily.points);
+    q.nativePrice = q.price; q.showCur = show; q.fNow = f;
+    for (const k of ['price', 'prev', 'change', 'dayHigh', 'dayLow', 'high52', 'low52']) if (q[k] != null) q[k] *= f;
+    this.data = { meta: raw.chart.meta, points: pts };
+    this.quote = q;
+    noteCurrency(native);
+    await this.ensureTradeFx();
+    if (ct !== this.convToken) return;
+    if (note) { this.noteEl.textContent = note; this.noteEl.hidden = false; }
+  }
+  /* Exchange rate on each trade date, for the position block. */
+  async ensureTradeFx() {
+    const q = this.quote, list = tradesFor(this.sym);
+    if (!q || q.showCur === q.currency || !list.length) { this.tfn = null; return; }
+    const range = rangeCovering(list[0].date);
+    try {
+      const [a, b] = await Promise.all([dailyUsdPer(q.currency, range), dailyUsdPer(q.showCur, range)]);
+      this.tfn = d => a(d) / b(d);
+    } catch (e) { this.tfn = null; }
+  }
+
+  ensureFresh() {
+    if (!this.started) { this.started = true; this.load(); return; }
+    if (this.el.hasAttribute('aria-busy')) return;
+    if (Date.now() - this.fetchedAt > STALE_MS) this.load();
+  }
+
+  /* ----- rendering ----- */
+  win() {
+    const n = this.data.points.length;
+    return this.zoom ? [Math.max(0, this.zoom[0]), Math.min(n - 1, this.zoom[1])] : [0, n - 1];
+  }
+
+  render() {
+    const q = this.quote;
+    this.nameEl.textContent = q ? q.name : '';
+    if (q && q.open != null) {
+      this.mktEl.hidden = false;
+      this.mktEl.textContent = q.open ? 'Market open' : 'Market closed';
+      this.mktEl.classList.toggle('open', !!q.open);
+    } else this.mktEl.hidden = true;
+    this.renderChartState();
+    this.renderFacts();
+    this.syncTradeBtn();
+    const tag = $('.curtag', this.tradesEl);
+    if (tag && q) tag.textContent = q.currency;
+    this.resetBtn.hidden = !this.zoom;
+    if (this.table) this.renderTable(); else this.drawChart();
+  }
+
+  afterWindowChange() {
+    this.resetBtn.hidden = !this.zoom;
+    this.renderFacts();
+    if (this.table) this.renderTable(); else this.drawChart();
+  }
+
+  resetZoom() { if (this.zoom) { this.zoom = null; this.afterWindowChange(); } }
+
+  renderChartState() {
+    if (this.data) return;
+    if (this.err) {
+      this.chartEl.innerHTML = `<div class="err"><div><strong>${esc(this.sym)}</strong> couldn’t be loaded.</div><div>${esc(this.err)}</div>
+        <div class="row"><button type="button" class="js-retry">Try again</button><button type="button" class="js-drop">Remove</button></div></div>`;
+      $('.js-retry', this.chartEl).onclick = () => this.load();
+      $('.js-drop', this.chartEl).onclick = () => removeTicker(this.sym);
+    } else {
+      this.chartEl.innerHTML = `<div class="ph">Loading ${esc(this.sym)}…</div>`;
+    }
+  }
+
+  renderFacts() {
+    const q = this.quote, f = this.factsEl;
+    if (!q || !this.data) {
+      f.innerHTML = this.err ? '' : '<div class="skel" style="width:70%;height:30px"></div><div class="skel" style="width:45%"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+      return;
+    }
+    const pts = this.data.points;
+    const [i0, i1] = this.win();
+    let hi = -Infinity, lo = Infinity;
+    for (let i = i0; i <= i1; i++) { if (pts[i].c > hi) hi = pts[i].c; if (pts[i].c < lo) lo = pts[i].c; }
+    const first = pts[i0].c, last = pts[i1].c;
+    const wch = (last - first) / first * 100;
+    const lbl = this.zoom ? 'Selection' : this.rangeKey;
+    const chgHtml = q.change != null
+      ? `<div class="chg-row"><span class="chg ${dir(q.change)}"><span aria-hidden="true">${arrow(q.change)}</span><span>${fmtSigned(q.change, q.price)} (${fmtPct(q.pct)})</span></span><span class="lab">on the day</span></div>` : '';
+    let wk = '';
+    if (q.high52 != null && q.low52 != null && q.high52 > q.low52 && q.price != null) {
+      const pos = Math.max(0, Math.min(1, (q.price - q.low52) / (q.high52 - q.low52))) * 100;
+      wk = `<div class="wk"><div class="top-row"><span class="lab52">52-week range</span></div>
+        <div class="bar" role="img" aria-label="Price is ${Math.round(pos)}% of the way from the 52-week low to the high"><i style="left:${pos}%"></i></div>
+        <div class="ends"><span>${fmtPrice(q.low52)}</span><span>${fmtPrice(q.high52)}</span></div></div>`;
+    }
+    const asof = q.time ? dtf(q.tz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(q.time) : '';
+    const fxRows = ['USD', 'CAD'].map(c => `<div><dt>Price · ${c}</dt><dd>${fmtPrice(c === q.showCur ? q.price : convert(q.nativePrice, q.currency, c))}</dd></div>`).join('');
+    const posHtml = positionRows(this, q);
+    f.innerHTML = `
+      <div class="price"><span>${fmtPrice(q.price)}</span><span class="cur">${esc(q.showCur)}</span></div>
+      ${chgHtml}
+      <dl>
+        ${fxRows}
+        <div><dt>${esc(lbl)} change</dt><dd class="${dir(wch)}">${arrow(wch)} ${fmtPct(wch)}</dd></div>
+        <div><dt>High · ${esc(lbl)}</dt><dd>${fmtPrice(hi)}</dd></div>
+        <div><dt>Low · ${esc(lbl)}</dt><dd>${fmtPrice(lo)}</dd></div>
+        <div><dt>Day range</dt><dd>${q.dayLow != null && q.dayHigh != null ? fmtPrice(q.dayLow) + ' – ' + fmtPrice(q.dayHigh) : '—'}</dd></div>
+        <div><dt>Prev close</dt><dd>${fmtPrice(q.prev)}</dd></div>
+        <div><dt>Volume</dt><dd>${fmtVol(q.vol)}</dd></div>
+        <div><dt>Exchange</dt><dd style="font-family:var(--font-ui)">${esc(q.exchange || '—')}</dd></div>
+        ${wk}
+        ${posHtml}
+      </dl>
+      ${asof ? `<p class="asof">As of ${esc(asof)}</p>` : ''}`;
+  }
+
+  renderTable() {
+    if (!this.data) return;
+    const [i0, i1] = this.win();
+    const tz = this.quote ? this.quote.tz : '';
+    const fmt = dtf(tz, this.intraday ? TIP_INTRADAY : TIP_DAILY);
+    const rows = [];
+    for (let i = i1; i >= i0 && rows.length < 400; i--) {
+      const p = this.data.points[i];
+      rows.push(`<tr><td>${esc(fmt.format(p.t))}</td><td>${fmtPrice(p.c)}</td><td>${fmtVol(p.v)}</td></tr>`);
+    }
+    this.tableEl.innerHTML = `<table><thead><tr><th>Time</th><th>Close · ${esc(this.quote ? this.quote.showCur : '')}</th><th>Volume</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+  }
+
+  drawChart() {
+    if (this.table || !this.data) return;
+    const el = this.chartEl;
+    const W = Math.floor(el.clientWidth), H = Math.floor(el.clientHeight);
+    if (W < 120 || H < 120) return;
+    const pts = this.data.points;
+    const tz = this.quote ? this.quote.tz : '';
+    const m = { l: 6, r: 56, t: 10, b: 24 };
+    const pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const [i0, i1] = this.win();
+    const span = Math.max(1, i1 - i0);
+    let lo = Infinity, hi = -Infinity, vmax = 0;
+    for (let i = i0; i <= i1; i++) {
+      const p = pts[i];
+      if (p.c < lo) lo = p.c; if (p.c > hi) hi = p.c; if (p.v > vmax) vmax = p.v;
+    }
+    const prev = this.rangeKey === '1D' && this.quote && this.quote.prev != null ? this.quote.prev : null;
+    if (prev != null) { lo = Math.min(lo, prev); hi = Math.max(hi, prev); }
+    const marks = this.tradeMarks(i0, i1);
+    for (const mk of marks) { lo = Math.min(lo, mk.p); hi = Math.max(hi, mk.p); }
+    if (hi === lo) { const d = Math.abs(hi) * 0.01 || 1; hi += d; lo -= d; }
+    const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+    const priceH = ph * 0.80, volTop = m.t + ph * 0.85, volH = ph * 0.15;
+    const X = i => m.l + (i - i0) / span * pw;
+    const Y = v => m.t + (1 - (v - lo) / (hi - lo)) * priceH;
+
+    let line = '';
+    for (let i = i0; i <= i1; i++) line += (i === i0 ? 'M' : 'L') + X(i).toFixed(1) + ',' + Y(pts[i].c).toFixed(1);
+    const base = (m.t + priceH).toFixed(1);
+    const area = `${line}L${X(i1).toFixed(1)},${base}L${X(i0).toFixed(1)},${base}Z`;
+
+    const { ticks, decimals } = niceTicks(lo, hi, 5);
+    const yfmt = nf(decimals, decimals);
+    let grid = '';
+    for (const t of ticks) {
+      const y = Y(t).toFixed(1);
+      grid += `<line x1="${m.l}" x2="${m.l + pw}" y1="${y}" y2="${y}" stroke="var(--rule-2)"/><text x="${m.l + pw + 8}" y="${(+y + 4).toFixed(1)}">${yfmt.format(t)}</text>`;
+    }
+
+    const spanMs = pts[i1].t - pts[i0].t;
+    const tf = dtf(tz, tickOpts(spanMs));
+    const nx = Math.max(2, Math.min(6, Math.floor(pw / 80)));
+    let xl = '';
+    for (let k = 0; k < nx; k++) {
+      const idx = Math.round(i0 + k * (i1 - i0) / (nx - 1));
+      const anchor = k === 0 ? 'start' : k === nx - 1 ? 'end' : 'middle';
+      xl += `<text x="${X(idx).toFixed(1)}" y="${H - 6}" text-anchor="${anchor}">${esc(tf.format(pts[idx].t))}</text>`;
+    }
+
+    const bw = Math.max(1, Math.min(8, pw / (span + 1) * 0.7));
+    let vol = '';
+    if (vmax > 0) {
+      for (let i = i0; i <= i1; i++) {
+        const h = pts[i].v / vmax * volH;
+        if (h < 0.5) continue;
+        vol += `<rect x="${(X(i) - bw / 2).toFixed(1)}" y="${(volTop + volH - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1"/>`;
+      }
+    }
+
+    const prevLine = prev != null
+      ? `<line x1="${m.l}" x2="${m.l + pw}" y1="${Y(prev).toFixed(1)}" y2="${Y(prev).toFixed(1)}" stroke="var(--ink-3)" stroke-dasharray="3 4" opacity=".7"/>
+         <text x="${m.l + 2}" y="${(Y(prev) - 4).toFixed(1)}">prev close</text>` : '';
+    const endDot = i1 === pts.length - 1
+      ? `<circle cx="${X(i1).toFixed(1)}" cy="${Y(pts[i1].c).toFixed(1)}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>` : '';
+    const markSvg = marks.map(mk => {
+      const x = X(mk.idx), y = Y(mk.p), up = mk.t.side === 'buy';
+      const d = up ? `M${x.toFixed(1)},${(y - 7).toFixed(1)}L${(x + 6).toFixed(1)},${(y + 4.5).toFixed(1)}L${(x - 6).toFixed(1)},${(y + 4.5).toFixed(1)}Z`
+                   : `M${x.toFixed(1)},${(y + 7).toFixed(1)}L${(x + 6).toFixed(1)},${(y - 4.5).toFixed(1)}L${(x - 6).toFixed(1)},${(y - 4.5).toFixed(1)}Z`;
+      return `<path class="mk ${mk.t.side}" d="${d}" fill="var(--${up ? 'up' : 'down'})" stroke="var(--surface)" stroke-width="1.5" stroke-linejoin="round"/>`;
+    }).join('');
+    const label = `${this.sym} price in ${this.quote ? this.quote.showCur : ''} over ${this.zoom ? 'the selected window' : this.rangeKey}, from ${fmtPrice(pts[i0].c)} to ${fmtPrice(pts[i1].c)}.${marks.length ? ` Includes ${marks.length} logged trade${marks.length === 1 ? '' : 's'}.` : ''} Use the Table button for the data.`;
+
+    el.innerHTML = `
+      <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(label)}">
+        <defs><linearGradient id="${this.gid}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style="stop-color:var(--accent);stop-opacity:.22"/><stop offset="1" style="stop-color:var(--accent);stop-opacity:0"/>
+        </linearGradient></defs>
+        ${grid}
+        <line x1="${m.l}" x2="${m.l + pw}" y1="${H - m.b}" y2="${H - m.b}" stroke="var(--rule)"/>
+        <g fill="var(--ink-3)" opacity=".38">${vol}</g>
+        ${prevLine}
+        <path d="${area}" fill="url(#${this.gid})"/>
+        <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+        ${endDot}
+        ${markSvg}
+        ${xl}
+        <rect class="sel" y="${m.t}" height="${H - m.t - m.b}" x="0" width="0" fill="var(--accent)" opacity=".14" stroke="var(--accent)" stroke-opacity=".5" style="display:none"/>
+        <g class="hv" style="display:none">
+          <line y1="${m.t}" y2="${H - m.b}" stroke="var(--ink-3)" stroke-dasharray="3 3"/>
+          <circle r="4.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>
+        </g>
+      </svg>
+      <div class="tip" hidden></div>`;
+    this.geo = { m, pw, ph, i0, i1, W, H, X, Y };
+    this.selEl = $('.sel', el);
+    this.hvEl = $('.hv', el);
+    this.tipEl = $('.tip', el);
+    this.marks = marks;
+    this.keyEl.hidden = !marks.length;
+  }
+
+  showHover(i) {
+    const g = this.geo; if (!g || !this.hvEl) return;
+    const p = this.data.points[i];
+    const x = g.X(i), y = g.Y(p.c);
+    this.hvEl.style.display = '';
+    const ln = this.hvEl.firstElementChild, dot = this.hvEl.lastElementChild;
+    ln.setAttribute('x1', x); ln.setAttribute('x2', x);
+    dot.setAttribute('cx', x); dot.setAttribute('cy', y);
+
+    const first = this.data.points[g.i0].c;
+    const ch = p.c - first, pct = ch / first * 100;
+    const tz = this.quote ? this.quote.tz : '';
+    const when = dtf(tz, this.intraday ? TIP_INTRADAY : TIP_DAILY).format(p.t);
+    const tip = this.tipEl;
+    const near = (this.marks || []).filter(m => Math.abs(g.X(m.idx) - x) <= 7);
+    const res = near.length ? this.tradeRes() : null;
+    const trades = near.map(m => tradeTipHTML(m.t, res && res[m.t.id], this.quote ? this.quote.showCur : '')).join('');
+    tip.innerHTML = `<div class="t-date">${esc(when)}</div><div class="t-price">${fmtPrice(p.c)} <span class="t-cur">${esc(this.quote ? this.quote.showCur : '')}</span></div>
+      <div class="t-row"><span>Since window start</span><b class="${dir(ch)}">${arrow(ch)} ${fmtPct(pct)}</b></div>
+      <div class="t-row"><span>Volume</span><b>${fmtVol(p.v)}</b></div>${trades}`;
+    tip.hidden = false;
+    const tw = tip.offsetWidth;
+    let left = x + 14;
+    if (left + tw > g.W - 4) left = x - tw - 14;
+    tip.style.left = Math.max(4, left) + 'px';
+  }
+
+  hideHover() {
+    if (this.hvEl) this.hvEl.style.display = 'none';
+    if (this.tipEl) this.tipEl.hidden = true;
+  }
+
+  /* ----- trades ----- */
+  tradeRes() {
+    const q = this.quote;
+    if (!q || q.nativePrice == null) return null;
+    const fOf = q.showCur === q.currency ? () => 1 : d => this.tfn ? this.tfn(d) : q.fNow;
+    const dp = this.raw && (this.intraday ? this.raw.daily : this.raw.chart);   // daily-or-longer bars
+    let closeAt = null;
+    if (dp && dp.points.length) {
+      const dk = dayKeyFn(dp.meta), keys = dp.points.map(p => dk(p.t));
+      closeAt = d => { const i = lastLE(keys, d); return i < 0 || daysBetween(keys[i], d) > 5 ? null : dp.points[i].c; };
+    }
+    return tradeResults(tradesFor(this.sym), fOf, q.nativePrice, q.fNow, closeAt);
+  }
+  /* Where a logged trade sits on this chart. Trades have a date but no time of
+     day, so on intraday charts the marker goes on that day's point whose price is
+     closest to the trade price. Trades outside the visible window get no marker. */
+  tradeMarks(i0, i1) {
+    const list = tradesFor(this.sym);
+    if (!list.length || !this.data) return [];
+    const pts = this.data.points, dk = dayKeyFn(this.data.meta);
+    const keys = pts.map(p => dk(p.t));
+    const iv = this.rangeDef.interval, reach = iv === '1wk' ? 7 : iv === '1mo' ? 31 : 3;
+    const out = [];
+    for (const t of list) {
+      let idx = -1;
+      if (this.intraday) {
+        let best = Infinity;
+        for (let i = 0; i < keys.length; i++) {
+          if (keys[i] !== t.date) continue;
+          const d = Math.abs(pts[i].n - t.price);
+          if (d < best) { best = d; idx = i; }
+        }
+      } else {
+        let lo = 0, hi = keys.length - 1;
+        while (lo <= hi) { const m = (lo + hi) >> 1; if (keys[m] <= t.date) { idx = m; lo = m + 1; } else hi = m - 1; }
+        if (idx >= 0 && daysBetween(keys[idx], t.date) > reach) idx = -1;
+      }
+      if (idx >= i0 && idx <= i1) out.push({ t, idx, p: t.price * pts[idx].f });
+    }
+    return out;
+  }
+  syncTradeBtn() {
+    const n = tradesFor(this.sym).length;
+    this.tradeBtn.textContent = n ? `Trades · ${n}` : 'Log trade';
+  }
+  toggleTrades() {
+    const open = this.tradesEl.hidden;
+    if (open) {
+      const q = this.quote;
+      this.tradesEl.innerHTML = tradeFormHTML(this.sym, q ? q.currency : '', q ? fmtPrice(q.nativePrice) : '') + '<ul class="tlist"></ul>';
+      bindTradeForm($('form', this.tradesEl), this.sym);
+      this.renderTradeList();
+    }
+    this.tradesEl.hidden = !open;
+    this.tradeBtn.setAttribute('aria-expanded', String(open));
+    if (open) { const p = $('[name="price"]', this.tradesEl); if (p) p.focus(); }
+  }
+  renderTradeList() {
+    const ul = $('.tlist', this.tradesEl);
+    if (!ul) return;
+    const list = tradesFor(this.sym).reverse();
+    ul.innerHTML = list.length
+      ? list.map(t => `<li><span class="tside ${t.side}">${t.side}</span><span>${fmtQty(t.qty)} @ ${fmtPrice(t.price)} ${esc(t.cur)}</span><span class="when">${esc(fmtDate(t.date))}</span>
+          <button class="icon-btn sm" type="button" data-del="${esc(t.id)}" aria-label="Delete this ${t.side} on ${esc(fmtDate(t.date))}" title="Delete">${icon('trash', 14)}</button></li>`).join('')
+      : '<li class="none">No trades logged for this ticker yet.</li>';
+  }
+
+  /* ----- folder menu ----- */
+  toggleMenu() { this.menuEl.hidden ? this.openMenu() : closeMenu(); }
+  openMenu() {
+    if (openMenuCard && openMenuCard !== this) closeMenu();
+    this.renderMenu();
+    this.menuEl.hidden = false;
+    this.foldersBtn.setAttribute('aria-expanded', 'true');
+    this.el.classList.add('menu-open');
+    openMenuCard = this;
+    const first = this.menuEl.querySelector('input');
+    if (first) first.focus();
+  }
+  renderMenu() {
+    const keep = this.menuEl.contains(document.activeElement) ? document.activeElement.dataset.id : null;
+    const rows = state.folders.map(f => `<label><input type="checkbox" data-id="${esc(f.id)}" ${f.tickers.includes(this.sym) ? 'checked' : ''}><span class="nav-name">${esc(f.name)}</span><span class="count">${f.tickers.length}</span></label>`).join('');
+    this.menuEl.innerHTML = `<h4>Save ${esc(this.sym)} to</h4>
+      ${rows || '<p class="none">No folders yet. Create one below.</p>'}
+      <form><input type="text" maxlength="40" placeholder="New folder name" aria-label="New folder name"><button type="submit">Create</button></form>`;
+    for (const cb of this.menuEl.querySelectorAll('input[type="checkbox"]')) {
+      cb.addEventListener('change', () => setMembership(this.sym, cb.dataset.id, cb.checked));
+      if (keep && cb.dataset.id === keep) cb.focus();
+    }
+    $('form', this.menuEl).addEventListener('submit', e => {
+      e.preventDefault();
+      const inp = e.target.querySelector('input');
+      const name = inp.value.trim();
+      if (!name) { inp.focus(); return; }
+      const f = createFolder(name);
+      setMembership(this.sym, f.id, true);
+      toast(`Saved ${this.sym} to “${f.name}”`);
+    });
+  }
+}
+
+function closeMenu() {
+  if (!openMenuCard) return;
+  const c = openMenuCard; openMenuCard = null;
+  c.menuEl.hidden = true;
+  c.foldersBtn.setAttribute('aria-expanded', 'false');
+  c.el.classList.remove('menu-open');
+}
+document.addEventListener('pointerdown', e => { if (openMenuCard && !openMenuCard.menuWrap.contains(e.target)) closeMenu(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && openMenuCard) { const b = openMenuCard.foldersBtn; closeMenu(); b.focus(); }
+});
+
+const getCard = sym => {
+  let c = cards.get(sym);
+  if (!c) { c = new Card(sym); cards.set(sym, c); }
+  return c;
+};
+
+/* ---------------- trades ---------------- */
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const validDate = s => {
+  if (!DATE_RE.test(s)) return false;
+  const d = new Date(s + 'T00:00:00Z');
+  return !isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+};
+const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const daysBetween = (a, b) => (Date.parse(b) - Date.parse(a)) / DAY;
+const fmtDate = s => dtf('UTC', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(s + 'T00:00:00Z'));
+const fmtQty = q => nf(0, 6).format(q);
+/* Oldest first; on the same day buys count before sells. */
+const tradeOrder = (a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.side === b.side ? 0 : a.side === 'buy' ? -1 : 1);
+const tradesFor = sym => state.trades.filter(t => t.sym === sym).sort(tradeOrder);
+
+/* Average-cost position in the ticker's own currency. */
+function positionOf(sym, fOf = () => 1) {
+  let qty = 0, cost = 0, realized = 0;
+  for (const t of tradesFor(sym)) {
+    if (t.side === 'buy') { qty += t.qty; cost += t.qty * t.price * fOf(t.date); continue; }
+    const q = Math.min(t.qty, qty);
+    if (q > 0) { const avg = cost / qty; realized += q * (t.price * fOf(t.date) - avg); cost -= q * avg; qty -= q; }
+  }
+  if (qty < 1e-9) { qty = 0; cost = 0; }
+  return { qty, cost, avg: qty ? cost / qty : 0, realized };
+}
+/* What each single trade has made, in the display currency, against the market.
+   list: this ticker's trades, oldest first. fOf(date): display units per native unit
+   on that date. nowN / fNow: latest native price and its display factor.
+   closeAt(date): the native closing price on or just before that date, or null. */
+function tradeResults(list, fOf, nowN, fNow, closeAt) {
+  const out = {}, nowD = nowN * fNow;
+  let qty = 0, cost = 0;
+  for (const t of list) {
+    const f = fOf(t.date), paid = t.price * f;
+    const close = closeAt ? closeAt(t.date) : null;
+    const r = { side: t.side, paid, closeD: close != null ? close * f : null, vsClose: close ? (t.price / close - 1) * 100 : null, nowD };
+    if (t.side === 'buy') {
+      qty += t.qty; cost += t.qty * paid;
+      r.q = t.qty; r.cost = t.qty * paid; r.value = t.qty * nowD; r.pnl = r.value - r.cost; r.pct = r.cost > 0 ? r.pnl / r.cost * 100 : 0;
+    } else {
+      const q = Math.min(t.qty, qty);
+      const avg = qty > 0 ? cost / qty : 0;
+      r.q = q; r.avg = avg; r.pnl = q * (paid - avg); r.pct = avg > 0 ? (paid / avg - 1) * 100 : 0;
+      r.sinceSale = paid > 0 ? (nowD / paid - 1) * 100 : 0; r.held = q * (nowD - paid);
+      if (q > 0) { cost -= q * avg; qty -= q; }
+      if (qty < 1e-9) { qty = 0; cost = 0; }
+    }
+    out[t.id] = r;
+  }
+  return out;
+}
+function tradeTipHTML(t, r, disp, withDate = true) {
+  const buy = t.side === 'buy';
+  let h = `<div class="t-trade ${t.side}"><b>${buy ? 'Bought' : 'Sold'}</b> ${fmtQty(t.qty)} ${esc(t.sym)} @ ${fmtPrice(t.price)} ${esc(t.cur)}${withDate ? `<span class="t-sub">${esc(fmtDate(t.date))}</span>` : ''}`;
+  if (!r) return h + '<span class="t-sub">No price data to compare with yet.</span></div>';
+  const row = (k, v, cls) => `<div class="t-row"><span>${k}</span><b${cls ? ` class="${cls}"` : ''}>${v}</b></div>`;
+  if (r.closeD != null) {
+    h += row('Market that day', money(r.closeD, disp));
+    if (r.vsClose != null) h += row(buy ? 'You paid vs market' : 'You sold vs market', fmtPct(r.vsClose));
+  }
+  h += row('Market now', money(r.nowD, disp));
+  if (buy) {
+    h += row('Cost', money(r.cost, disp)) + row('Worth now', money(r.value, disp));
+    h += row('Made so far', `${money(r.pnl, disp, true)} (${fmtPct(r.pct)})`, dir(r.pnl));
+  } else {
+    h += row('Avg cost then', money(r.avg, disp));
+    h += row('Made on sale', `${money(r.pnl, disp, true)} (${fmtPct(r.pct)})`, dir(r.pnl));
+    h += row('Market since sale', fmtPct(r.sinceSale), dir(r.sinceSale));
+    h += row('Holding instead', `${money(r.held, disp, true)}`, dir(r.held));
+  }
+  return h + '</div>';
+}
+
+function positionRows(card, q) {
+  const sym = card.sym;
+  if (!state.trades.some(t => t.sym === sym) || q.price == null) return '';
+  const fOf = q.showCur === q.currency ? () => 1 : d => card.tfn ? card.tfn(d) : q.fNow;
+  const p = positionOf(sym, fOf);
+  let h = '<div class="grp">Your position</div>';
+  if (p.qty > 0) {
+    const val = p.qty * q.price, un = val - p.cost, pct = p.cost > 0 ? un / p.cost * 100 : 0;
+    h += `<div><dt>Shares</dt><dd>${fmtQty(p.qty)}</dd></div>
+      <div><dt>Avg cost</dt><dd>${fmtPrice(p.avg)}</dd></div>
+      <div><dt>Value</dt><dd>${fmtPrice(val)}</dd></div>
+      <div><dt>Unrealized</dt><dd class="${dir(un)}">${fmtSigned(un, q.price)}<span class="sub">${fmtPct(pct)}</span></dd></div>`;
+  } else {
+    h += '<div><dt>Shares</dt><dd>0 (closed)</dd></div>';
+  }
+  if (Math.abs(p.realized) > 1e-9) h += `<div><dt>Realized</dt><dd class="${dir(p.realized)}">${fmtSigned(p.realized, q.price)}</dd></div>`;
+  return h;
+}
+/* The first sale that is larger than what was held at that point, or null. */
+function oversold(list) {
+  const held = {};
+  for (const t of [...list].sort(tradeOrder)) {
+    const h = held[t.sym] || 0;
+    if (t.side === 'buy') held[t.sym] = h + t.qty;
+    else { if (t.qty > h + 1e-9) return t; held[t.sym] = h - t.qty; }
+  }
+  return null;
+}
+const heldAt = (sym, date, list) => list.filter(t => t.sym === sym && t.date <= date).sort(tradeOrder)
+  .reduce((h, t) => h + (t.side === 'buy' ? t.qty : -t.qty), 0);
+
+const symCur = new Map();
+async function currencyOf(sym) {
+  const c = cards.get(sym);
+  const known = (c && c.quote && c.quote.currency) || symCur.get(sym) || (state.trades.find(t => t.sym === sym) || {}).cur;
+  if (known) return known;
+  const d = await loadSeries(sym, '5d');
+  const cur = d.meta.currency || 'USD';
+  symCur.set(sym, cur);
+  return cur;
+}
+
+function tradeFormHTML(fixedSym, cur, placeholder) {
+  const today = todayStr();
+  return `<form class="tform" novalidate>
+    ${fixedSym ? '' : '<label>Ticker<input type="text" name="sym" list="knownSyms" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder="AAPL"></label>'}
+    <div class="fld">Type<div class="seg" role="radiogroup" aria-label="Buy or sell"><label><input type="radio" name="side" value="buy" checked><span>Buy</span></label><label><input type="radio" name="side" value="sell"><span>Sell</span></label></div></div>
+    <label>Date<input type="date" name="date" value="${today}" max="${today}"></label>
+    <label>Price <span class="curtag">${esc(cur || '')}</span><input type="number" name="price" step="any" min="0" inputmode="decimal" placeholder="${esc(placeholder || '0.00')}"></label>
+    <label>Quantity<input type="number" name="qty" step="any" min="0" inputmode="decimal" placeholder="0"></label>
+    <button class="btn primary go" type="submit">Add purchase</button>
+    <p class="form-err" role="alert" hidden></p>
+  </form>`;
+}
+async function refreshCurTag(form) {
+  const tag = $('.curtag', form), sym = String(form.elements.sym.value || '').trim().toUpperCase();
+  if (!SYM_RE.test(sym)) { tag.textContent = ''; return; }
+  try {
+    const c = await currencyOf(sym);
+    if (String(form.elements.sym.value).trim().toUpperCase() === sym) tag.textContent = c;
+  } catch (e) { tag.textContent = ''; }
+}
+function bindTradeForm(form, fixedSym) {
+  const sync = () => { $('.go', form).textContent = form.elements.side.value === 'sell' ? 'Add sale' : 'Add purchase'; };
+  form.addEventListener('change', e => { if (e.target.name === 'side') sync(); });
+  form.addEventListener('submit', e => { e.preventDefault(); submitTrade(form, fixedSym); });
+  if (!fixedSym) form.elements.sym.addEventListener('change', () => refreshCurTag(form));
+  sync();
+}
+async function submitTrade(form, fixedSym) {
+  const err = $('.form-err', form), btn = $('.go', form);
+  const say = m => { err.textContent = m; err.hidden = !m; };
+  const fd = new FormData(form);
+  const sym = fixedSym || String(fd.get('sym') || '').trim().toUpperCase();
+  const side = fd.get('side') === 'sell' ? 'sell' : 'buy';
+  const date = String(fd.get('date') || '');
+  const price = Number(fd.get('price')), qty = Number(fd.get('qty'));
+  if (!SYM_RE.test(sym)) return say('Enter a ticker, for example AAPL.');
+  if (!validDate(date)) return say('Pick a date.');
+  if (date > todayStr()) return say('The date can’t be in the future.');
+  if (!(price > 0) || !isFinite(price)) return say('Enter the price per share as a number above 0.');
+  if (!(qty > 0) || !isFinite(qty)) return say('Enter the number of shares as a number above 0.');
+  say(''); btn.disabled = true;
+  let cur;
+  try { cur = await currencyOf(sym); }
+  catch (e) { btn.disabled = false; return say(`Couldn’t find ${sym}. Check the ticker and try again.`); }
+  btn.disabled = false;
+  const cand = { id: uid(), sym, side, date, price, qty, cur };
+  const before = oversold(state.trades), after = oversold([...state.trades, cand]);
+  if (after && (!before || after.id !== before.id)) {
+    return say(after === cand
+      ? `You held ${fmtQty(Math.max(0, heldAt(sym, date, state.trades)))} ${sym} on ${fmtDate(date)}, so you can’t sell ${fmtQty(qty)}.`
+      : `That would leave your ${after.sym} sale on ${fmtDate(after.date)} larger than what you held.`);
+  }
+  state.trades.push(cand);
+  save();
+  form.elements.price.value = ''; form.elements.qty.value = '';
+  afterTradesChanged();
+  toast(`${side === 'buy' ? 'Bought' : 'Sold'} ${fmtQty(qty)} ${sym} @ ${fmtPrice(price)} ${cur}`);
+}
+function deleteTrade(id) {
+  const i = state.trades.findIndex(t => t.id === id);
+  if (i < 0) return;
+  const [t] = state.trades.splice(i, 1);
+  save(); afterTradesChanged();
+  toast(`Deleted ${t.side} of ${t.sym}`, { label: 'Undo', run() {
+    state.trades.splice(Math.min(i, state.trades.length), 0, t);
+    save(); afterTradesChanged();
+  } });
+}
+function afterTradesChanged() {
+  for (const c of cards.values()) {
+    c.syncTradeBtn(); c.renderTradeList();
+    if (c.data) { c.renderFacts(); c.drawChart(); c.ensureTradeFx().then(() => c.renderFacts()); }
+  }
+  renderRail();
+  if (state.activeId === 'portfolio') { updateKnownSyms(); loadPortfolio(); } else port.dirty = true;
+}
+
+/* ---------------- portfolio ---------------- */
+const appEl = $('.app'), portEl = $('#portfolio');
+const port = { raw: null, calc: null, loading: false, err: '', token: 0, loadedAt: 0, dirty: true, built: false, table: false, geo: null };
+
+function rangeCovering(firstDate) {
+  const days = (Date.now() - Date.parse(firstDate)) / DAY + 8;
+  return days <= 28 ? '1mo' : days <= 175 ? '6mo' : days <= 360 ? '1y' : days <= 720 ? '2y' : days <= 1800 ? '5y' : days <= 3600 ? '10y' : 'max';
+}
+const lastLE = (keys, d) => {
+  let lo = 0, hi = keys.length - 1, a = -1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (keys[m] <= d) { a = m; lo = m + 1; } else hi = m - 1; }
+  return a;
+};
+
+async function loadPortfolio(force) {
+  if (!state.trades.length) { port.raw = port.calc = null; port.err = ''; port.loading = false; port.dirty = false; updatePortfolio(); return; }
+  const token = ++port.token;
+  port.loading = true; port.err = '';
+  if (!port.raw) updatePortfolio();
+  try {
+    const syms = [...new Set(state.trades.map(t => t.sym))];
+    const first = state.trades.reduce((m, t) => t.date < m ? t.date : m, '9999-12-31');
+    const range = rangeCovering(first), maxAge = force ? 0 : STALE_MS;
+    const results = await Promise.all(syms.map(s => loadSeries(s, range, '1d', maxAge).then(d => ({ s, d }), e => ({ s, e }))));
+    const need = new Set(['CAD']);
+    for (const t of state.trades) need.add(t.cur);
+    for (const r of results) if (r.d && r.d.meta.currency) need.add(r.d.meta.currency);
+    need.delete('USD');
+    const fx = {};
+    await Promise.all([...need].map(async c => { try { fx[c] = await usdPerSeries(c, range); } catch (e) { fx[c] = null; } }));
+    if (token !== port.token) return;
+    port.raw = { results, fx, range }; port.loadedAt = Date.now(); port.dirty = false;
+  } catch (e) {
+    if (token !== port.token) return;
+    port.err = e.message || 'Couldn’t load prices.';
+  }
+  port.loading = false;
+  recompute();
+  updatePortfolio();
+  lastUpdated = Date.now(); renderUpdated();
+}
+function recompute() { port.calc = port.raw ? computePortfolio(state.trades, port.raw, state.cur) : null; }
+
+/* Everything is worked out from the trades and each day's closing price.
+   Cost basis uses the average-cost method, converted at the exchange rate on
+   the day of each trade; current value uses the latest rate. */
+function computePortfolio(trades, raw, disp) {
+  const alt = disp === 'CAD' ? 'USD' : 'CAD';
+  const notes = [];
+  if (!raw.fx.CAD) return { empty: true, notes: ['Couldn’t load the CAD/USD exchange rate.'] };
+  const usdAt = (cur, d) => {                         // US dollars per 1 unit of cur on date d
+    if (cur === 'USD') return 1;
+    const s = raw.fx[cur];
+    if (!s) return null;
+    const i = lastLE(s.keys, d);
+    return s.vals[i < 0 ? 0 : i];
+  };
+  const px = {};
+  for (const r of raw.results) {
+    if (!r.d || !r.d.points.length) { notes.push(`${r.s} couldn’t be loaded${r.e ? ' (' + r.e.message + ')' : ''}, so it is left out of the totals.`); continue; }
+    const k = toKeyed(r.d), cur = r.d.meta.currency || 'USD';
+    if (cur !== 'USD' && !raw.fx[cur]) { notes.push(`No exchange rate was found for ${cur}, so ${r.s} is left out of the totals.`); continue; }
+    px[r.s] = { ...k, cur, name: r.d.meta.longName || r.d.meta.shortName || '' };
+  }
+  const mine = trades.filter(t => px[t.sym]).sort(tradeOrder);
+  if (!mine.length) return { empty: true, notes };
+
+  const syms = [...new Set(mine.map(t => t.sym))];
+  const first = mine[0].date;
+  const dateSet = new Set(mine.map(t => t.date));
+  for (const s of syms) for (const k of px[s].keys) if (k >= first) dateSet.add(k);
+  const dates = [...dateSet].sort();
+  const st = {};
+  for (const s of syms) st[s] = { qty: 0, cost: 0, costN: 0, realized: 0, ti: 0, tr: mine.filter(t => t.sym === s), pi: -1 };
+
+  let invested = 0, bought = 0;
+  const value = [], valueAlt = [], investedArr = [];
+  for (const d of dates) {
+    let vUSD = 0;
+    for (const s of syms) {
+      const S = st[s], P = px[s];
+      while (S.ti < S.tr.length && S.tr[S.ti].date <= d) {
+        const t = S.tr[S.ti++];
+        const f = usdAt(P.cur, t.date) / usdAt(disp, t.date);
+        if (t.side === 'buy') {
+          S.qty += t.qty; S.cost += t.qty * t.price * f; S.costN += t.qty * t.price;
+          invested += t.qty * t.price * f; bought += t.qty * t.price * f;
+        } else {
+          const q = Math.min(t.qty, S.qty);
+          if (q < t.qty - 1e-9) notes.push(`Your ${s} sale on ${fmtDate(t.date)} is larger than what you held. The extra ${fmtQty(t.qty - q)} is ignored.`);
+          if (q > 0) {
+            const avg = S.cost / S.qty, avgN = S.costN / S.qty;
+            S.realized += q * (t.price * f - avg);
+            S.cost -= q * avg; S.costN -= q * avgN; S.qty -= q;
+            invested -= q * t.price * f;
+            if (S.qty < 1e-9) { S.qty = 0; S.cost = 0; S.costN = 0; }
+          }
+        }
+      }
+      S.pi = lastLE(P.keys, d);
+      if (S.qty > 0 && S.pi >= 0) vUSD += S.qty * P.vals[S.pi] * usdAt(P.cur, d);
+    }
+    value.push(vUSD / usdAt(disp, d)); valueAlt.push(vUSD / usdAt(alt, d)); investedArr.push(invested);
+  }
+
+  const last = dates[dates.length - 1];
+  const trRes = {};
+  for (const s of syms) {
+    const P = px[s], i = P.keys.length - 1;
+    const fOf = d => usdAt(P.cur, d) / usdAt(disp, d);
+    Object.assign(trRes, tradeResults(st[s].tr, fOf, P.vals[i], fOf(last),
+      d => { const j = lastLE(P.keys, d); return j < 0 || daysBetween(P.keys[j], d) > 5 ? null : P.vals[j]; }));
+  }
+  const rows = [];
+  let tValue = 0, tAlt = 0, tDay = 0, tUnreal = 0, tReal = 0;
+  for (const s of syms) {
+    const S = st[s], P = px[s];
+    tReal += S.realized;
+    if (S.qty <= 0 || S.pi < 0) continue;
+    const price = P.vals[S.pi], prev = S.pi > 0 ? P.vals[S.pi - 1] : price;
+    const f = usdAt(P.cur, last) / usdAt(disp, last), fa = usdAt(P.cur, last) / usdAt(alt, last);
+    const val = S.qty * price * f;
+    rows.push({
+      sym: s, name: P.name, cur: P.cur, qty: S.qty, avg: S.costN / S.qty, price,
+      val, valAlt: S.qty * price * fa, day: S.qty * (price - prev) * f, dayPct: prev ? (price / prev - 1) * 100 : 0,
+      cost: S.cost, gain: val - S.cost, gainPct: S.cost > 0 ? (val - S.cost) / S.cost * 100 : 0,
+    });
+    tValue += val; tAlt += S.qty * price * fa; tDay += S.qty * (price - prev) * f; tUnreal += val - S.cost;
+  }
+  for (const r of rows) r.weight = tValue > 0 ? r.val / tValue * 100 : 0;
+  rows.sort((a, b) => b.val - a.val);
+  const gain = tValue - invested;
+  return {
+    notes: [...new Set(notes)], dates, value, valueAlt, invested: investedArr, rows, disp, alt, trRes,
+    altPer: usdAt(disp, last) / usdAt(alt, last),    // alt-currency units per 1 unit of disp
+    totals: {
+      value: tValue, alt: tAlt, day: tDay, dayPct: tValue - tDay ? tDay / (tValue - tDay) * 100 : 0,
+      invested, bought, realized: tReal, unrealized: tUnreal, gain, gainPct: bought > 0 ? gain / bought * 100 : 0,
+    },
+  };
+}
+
+function portWindow(c, key) {
+  const n = c.dates.length;
+  if (key === 'All') return [0, n - 1];
+  const lastD = c.dates[n - 1];
+  const cut = key === 'YTD' ? lastD.slice(0, 4) + '-01-01'
+    : new Date(Date.parse(lastD) - (key === '1M' ? 30 : key === '6M' ? 182 : 365) * DAY).toISOString().slice(0, 10);
+  const s = c.dates.findIndex(d => d >= cut);
+  return [s < 0 ? n - 1 : s, n - 1];
+}
+
+function buildPortfolio() {
+  if (port.built) return;
+  port.built = true;
+  portEl.innerHTML = `
+    <div class="p-empty" id="pEmpty" hidden><h2>No trades yet</h2>
+      <p>Add a buy or a sell below. Your portfolio value, gains and holdings are worked out from the trades you log and each day’s closing price, in CAD and USD.</p></div>
+    <div id="pNotes"></div>
+    <div class="tiles" id="pTiles"></div>
+    <section class="pcard" id="pChartCard">
+      <div class="pc-head"><h2>Portfolio value</h2><div class="ranges" id="pRanges" role="group" aria-label="Chart range"></div></div>
+      <div class="legend"><span><i></i>Portfolio value</span><span><i class="dash"></i>Net invested</span><button class="link" id="pTableBtn" type="button" style="margin-left:auto">Table</button></div>
+      <div class="pchart" id="pChart"></div>
+    </section>
+    <section class="pcard" id="pHoldCard"><div class="pc-head"><h2>Holdings</h2></div><div class="tbl-scroll" id="pHoldings"></div></section>
+    <section class="pcard" id="pFormCard"><div class="pc-head"><h2>Add a trade</h2></div>
+      <div id="pFormSlot">${tradeFormHTML(null, '', 'Price per share')}</div><datalist id="knownSyms"></datalist></section>
+    <section class="pcard" id="pHistCard"><div class="pc-head"><h2>Trade history</h2></div><div class="tbl-scroll" id="pHistory"></div></section>`;
+  const rg = $('#pRanges');
+  for (const k of PORT_RANGES) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'rng'; b.textContent = k; b.dataset.pr = k;
+    b.addEventListener('click', () => { state.portRange = k; save(); syncPortControls(); drawPortChart(); });
+    rg.append(b);
+  }
+  $('#pTableBtn').addEventListener('click', () => {
+    port.table = !port.table;
+    $('#pTableBtn').textContent = port.table ? 'Chart' : 'Table';
+    drawPortChart();
+  });
+  bindTradeForm($('form', $('#pFormSlot')), null);
+  const hist = $('#pHistory');
+  hist.addEventListener('click', e => { const b = e.target.closest('[data-del]'); if (b) { hideTradeTip(); deleteTrade(b.dataset.del); } });
+  const tipAt = (e, tr) => { if (tr && !e.target.closest('[data-del]')) showTradeTip(tr, e.clientX, e.clientY); else hideTradeTip(); };
+  hist.addEventListener('pointermove', e => tipAt(e, e.target.closest('tr[data-tid]')));
+  hist.addEventListener('pointerleave', hideTradeTip);
+  hist.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') tipAt(e, e.target.closest('tr[data-tid]')); });
+  hist.addEventListener('focusin', e => { const tr = e.target.closest('tr[data-tid]'); if (tr && e.target === tr) { const b = tr.getBoundingClientRect(); showTradeTip(tr, b.left + 24, b.bottom); } });
+  hist.addEventListener('focusout', hideTradeTip);
+  document.addEventListener('pointerdown', e => { if (!e.target.closest('#pHistory')) hideTradeTip(); });
+  window.addEventListener('scroll', hideTradeTip, { passive: true });
+  $('#pTiles').addEventListener('click', e => { if (e.target.closest('#pRetry')) loadPortfolio(true); });
+  const ch = $('#pChart');
+  ch.addEventListener('pointermove', portHover);
+  ch.addEventListener('pointerleave', hidePortHover);
+  new ResizeObserver(() => { if (!portEl.hidden) drawPortChart(); }).observe(ch);
+}
+/* One display currency for the whole app: the toggle in the page header drives
+   the chart cards and the portfolio alike. */
+$('#curSeg').addEventListener('click', e => {
+  const b = e.target.closest('[data-cur]');
+  if (!b || b.dataset.cur === state.cur) return;
+  state.cur = b.dataset.cur; save();
+  syncPortControls();
+  if (state.activeId === 'portfolio') { recompute(); updatePortfolio(); }
+  for (const c of cards.values()) {
+    if (!c.raw) continue;
+    c.el.setAttribute('aria-busy', 'true');
+    c.applyCurrency().then(() => { c.el.removeAttribute('aria-busy'); c.render(); });
+  }
+});
+function syncPortControls() {
+  for (const b of $('#curSeg').querySelectorAll('[data-cur]')) b.setAttribute('aria-pressed', String(b.dataset.cur === state.cur));
+  for (const b of portEl.querySelectorAll('[data-pr]')) b.setAttribute('aria-pressed', String(b.dataset.pr === state.portRange));
+}
+function updateKnownSyms() {
+  const dl = $('#knownSyms');
+  if (!dl) return;
+  const all = new Set([...state.scratch, ...state.trades.map(t => t.sym), ...state.folders.flatMap(f => f.tickers)]);
+  dl.innerHTML = [...all].sort().map(s => `<option value="${esc(s)}"></option>`).join('');
+}
+function renderPortfolio() {
+  buildPortfolio(); syncPortControls(); updateKnownSyms();
+  if (port.loading && !port.dirty) { updatePortfolio(); return; }
+  if (state.trades.length && (port.dirty || !port.raw || Date.now() - port.loadedAt > STALE_MS)) loadPortfolio();
+  else { recompute(); updatePortfolio(); }
+}
+function updatePortfolio() {
+  if (state.activeId !== 'portfolio' || !port.built) return;
+  const has = state.trades.length > 0;
+  $('#pEmpty').hidden = has;
+  for (const id of ['#pTiles', '#pChartCard', '#pHoldCard', '#pHistCard']) $(id).hidden = !has;
+  const c = port.calc;
+  $('#pNotes').innerHTML = has && c ? c.notes.slice(0, 4).map(n => `<p class="p-note">${esc(n)}</p>`).join('') : '';
+  $('#viewSub').textContent = has ? 'Based on the trades you log, using daily closing prices' : '';
+  if (!has) return;
+  renderTiles(); renderHoldings(); renderHistory(); drawPortChart();
+}
+function renderTiles() {
+  const el = $('#pTiles'), c = port.calc;
+  if (!c || c.empty) {
+    el.innerHTML = port.loading
+      ? '<div class="tile"><div class="k">Portfolio value</div><div class="skel" style="height:30px;width:60%"></div><div class="skel" style="width:40%"></div></div>'
+      : `<div class="tile"><div class="k">Portfolio value</div><div class="sub">${esc(port.err || 'Prices aren’t available right now.')}</div><button class="link" id="pRetry" type="button">Try again</button></div>`;
+    return;
+  }
+  const T = c.totals, d = c.disp, a = c.alt, k = c.altPer;
+  el.innerHTML = `
+    <div class="tile"><div class="k">Portfolio value</div><div class="big">${money(T.value, d)}</div><div class="sub">≈ ${money(T.alt, a)}</div></div>
+    <div class="tile"><div class="k">Day change</div><div class="big ${dir(T.day)}">${money(T.day, d, true)}</div><div class="sub"><span class="${dir(T.day)}">${arrow(T.day)} ${fmtPct(T.dayPct)}</span> · ≈ ${money(T.day * k, a, true)}</div></div>
+    <div class="tile"><div class="k">Total gain</div><div class="big ${dir(T.gain)}">${money(T.gain, d, true)}</div><div class="sub"><span class="${dir(T.gain)}">${arrow(T.gain)} ${fmtPct(T.gainPct)}</span> · ≈ ${money(T.gain * k, a, true)}</div></div>
+    <div class="tile"><div class="k">Net invested</div><div class="big">${money(T.invested, d)}</div><div class="sub">Realized ${money(T.realized, d, true)}<br>Unrealized ${money(T.unrealized, d, true)}</div></div>`;
+}
+function renderHoldings() {
+  const el = $('#pHoldings'), c = port.calc;
+  if (!c || c.empty) { el.innerHTML = ''; return; }
+  if (!c.rows.length) { el.innerHTML = '<p class="muted">No open positions. Everything you bought has been sold.</p>'; return; }
+  el.innerHTML = `<table class="tbl"><thead><tr><th>Ticker</th><th>Shares</th><th>Avg cost</th><th>Price</th><th>Value · ${c.disp}</th><th>Day</th><th>Gain</th><th>Weight</th></tr></thead><tbody>${
+    c.rows.map(r => `<tr>
+      <td class="sym-cell"><b>${esc(r.sym)}</b><small>${esc(r.name)}</small></td>
+      <td>${fmtQty(r.qty)}</td>
+      <td>${fmtPrice(r.avg)}<span class="sub">${esc(r.cur)}</span></td>
+      <td>${fmtPrice(r.price)}<span class="sub">${esc(r.cur)}</span></td>
+      <td>${money(r.val, c.disp)}<span class="sub">≈ ${money(r.valAlt, c.alt)}</span></td>
+      <td><span class="${dir(r.day)}">${money(r.day, c.disp, true)}</span><span class="sub">${fmtPct(r.dayPct)}</span></td>
+      <td><span class="${dir(r.gain)}">${money(r.gain, c.disp, true)}</span><span class="sub">${fmtPct(r.gainPct)}</span></td>
+      <td>${nf(1, 1).format(r.weight)}%<span class="wbar"><i style="width:${Math.min(100, r.weight).toFixed(1)}%"></i></span></td></tr>`).join('')}</tbody></table>`;
+}
+function renderHistory() {
+  const list = [...state.trades].sort(tradeOrder).reverse();
+  $('#pHistory').innerHTML = `<table class="tbl"><thead><tr><th>Date</th><th>Ticker</th><th>Type</th><th>Shares</th><th>Price</th><th>Amount</th><th><span class="sr">Delete</span></th></tr></thead><tbody>${
+    list.map(t => `<tr data-tid="${esc(t.id)}" tabindex="0"><td>${esc(fmtDate(t.date))}</td><td><b>${esc(t.sym)}</b></td><td><span class="tside ${t.side}">${t.side}</span></td>
+      <td>${fmtQty(t.qty)}</td><td>${fmtPrice(t.price)}<span class="sub">${esc(t.cur)}</span></td><td>${fmtPrice(t.qty * t.price)}<span class="sub">${esc(t.cur)}</span></td>
+      <td><button class="icon-btn sm" type="button" data-del="${esc(t.id)}" aria-label="Delete ${t.side} of ${esc(t.sym)} on ${esc(fmtDate(t.date))}" title="Delete">${icon('trash', 14)}</button></td></tr>`).join('')}</tbody></table>`;
+}
+
+let ftipEl = null;
+function hideTradeTip() { if (ftipEl) ftipEl.hidden = true; }
+function showTradeTip(tr, x, y) {
+  const c = port.calc, t = state.trades.find(z => z.id === tr.dataset.tid);
+  if (!c || c.empty || !t) { hideTradeTip(); return; }
+  if (!ftipEl) { ftipEl = document.createElement('div'); ftipEl.className = 'tip ftip'; ftipEl.setAttribute('role', 'tooltip'); document.body.append(ftipEl); }
+  ftipEl.innerHTML = tradeTipHTML(t, c.trRes[t.id], c.disp);
+  ftipEl.hidden = false;
+  const w = ftipEl.offsetWidth, h = ftipEl.offsetHeight;
+  let left = x + 16, top = y + 16;
+  if (left + w > innerWidth - 8) left = Math.max(8, x - w - 16);
+  if (top + h > innerHeight - 8) top = Math.max(8, y - h - 12);
+  ftipEl.style.left = left + 'px'; ftipEl.style.top = top + 'px';
+}
+
+function drawPortChart() {
+  const el = $('#pChart');
+  if (!el) return;
+  const c = port.calc;
+  if (!c || c.empty) { el.innerHTML = `<div class="ph">${port.loading ? 'Loading prices…' : esc(port.err || 'No price data to chart yet.')}</div>`; port.geo = null; return; }
+  if (port.table) {
+    const [t0, t1] = portWindow(c, state.portRange), rows = [];
+    for (let i = t1; i >= t0 && rows.length < 400; i--) {
+      const g = c.value[i] - c.invested[i];
+      rows.push(`<tr><td>${esc(fmtDate(c.dates[i]))}</td><td>${money(c.value[i], c.disp)}</td><td>${money(c.invested[i], c.disp)}</td><td class="${dir(g)}">${money(g, c.disp, true)}</td></tr>`);
+    }
+    el.innerHTML = `<div class="tablewrap" style="height:100%;max-height:none"><table><thead><tr><th>Date</th><th>Value · ${c.disp}</th><th>Net invested</th><th>Gain</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+    port.geo = null;
+    return;
+  }
+  const W = Math.floor(el.clientWidth), H = Math.floor(el.clientHeight);
+  if (W < 120 || H < 120) return;
+  const [i0, i1] = portWindow(c, state.portRange), span = i1 - i0;
+  let lo = Infinity, hi = -Infinity;
+  for (let i = i0; i <= i1; i++) { lo = Math.min(lo, c.value[i], c.invested[i]); hi = Math.max(hi, c.value[i], c.invested[i]); }
+  if (hi === lo) { const d = Math.abs(hi) * 0.01 || 1; hi += d; lo -= d; }
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const { ticks, decimals } = niceTicks(lo, hi, 5);
+  const yfmt = nf(decimals, decimals);
+  const labW = (ticks.length ? Math.max(...ticks.map(t => yfmt.format(t).length)) : 6) * 6.7 + 14;
+  const m = { l: 6, r: Math.max(48, Math.ceil(labW)), t: 10, b: 24 };
+  const pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const X = i => m.l + (span ? (i - i0) / span * pw : pw / 2);
+  const Y = v => m.t + (1 - (v - lo) / (hi - lo)) * ph;
+
+  let line = '', step = '';
+  for (let i = i0; i <= i1; i++) {
+    const x = X(i).toFixed(1);
+    line += (i === i0 ? 'M' : 'L') + x + ',' + Y(c.value[i]).toFixed(1);
+    step += i === i0 ? `M${x},${Y(c.invested[i]).toFixed(1)}` : `H${x}V${Y(c.invested[i]).toFixed(1)}`;
+  }
+  const base = (m.t + ph).toFixed(1);
+  const area = span ? `${line}L${X(i1).toFixed(1)},${base}L${X(i0).toFixed(1)},${base}Z` : '';
+  let grid = '';
+  for (const t of ticks) {
+    const y = Y(t).toFixed(1);
+    grid += `<line x1="${m.l}" x2="${m.l + pw}" y1="${y}" y2="${y}" stroke="var(--rule-2)"/><text x="${m.l + pw + 8}" y="${(+y + 4).toFixed(1)}">${yfmt.format(t)}</text>`;
+  }
+  const spanMs = Date.parse(c.dates[i1]) - Date.parse(c.dates[i0]);
+  const tf = dtf('UTC', spanMs <= 400 * DAY ? { month: 'short', day: 'numeric' } : { month: 'short', year: 'numeric' });
+  const nx = span ? Math.min(span + 1, Math.max(2, Math.min(6, Math.floor(pw / 90)))) : 1;
+  let xl = '';
+  for (let k = 0; k < nx; k++) {
+    const idx = nx === 1 ? i0 : Math.round(i0 + k * span / (nx - 1));
+    const anchor = k === 0 && nx > 1 ? 'start' : k === nx - 1 && nx > 1 ? 'end' : 'middle';
+    xl += `<text x="${X(idx).toFixed(1)}" y="${H - 6}" text-anchor="${anchor}">${esc(tf.format(new Date(c.dates[idx] + 'T00:00:00Z')))}</text>`;
+  }
+  const endDot = `<circle cx="${X(i1).toFixed(1)}" cy="${Y(c.value[i1]).toFixed(1)}" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/>`;
+  const marks = [];
+  for (const t of state.trades) {
+    if (!c.trRes[t.id]) continue;
+    const idx = c.dates.indexOf(t.date);
+    if (idx >= i0 && idx <= i1) marks.push({ t, idx });
+  }
+  const markSvg = marks.map(mk => {
+    const x = X(mk.idx), y = Y(c.value[mk.idx]), up = mk.t.side === 'buy';
+    const d = up ? `M${x.toFixed(1)},${(y - 7).toFixed(1)}L${(x + 6).toFixed(1)},${(y + 4.5).toFixed(1)}L${(x - 6).toFixed(1)},${(y + 4.5).toFixed(1)}Z`
+                 : `M${x.toFixed(1)},${(y + 7).toFixed(1)}L${(x + 6).toFixed(1)},${(y - 4.5).toFixed(1)}L${(x - 6).toFixed(1)},${(y - 4.5).toFixed(1)}Z`;
+    return `<path class="mk ${mk.t.side}" d="${d}" fill="var(--${up ? 'up' : 'down'})" stroke="var(--surface)" stroke-width="1.5" stroke-linejoin="round"/>`;
+  }).join('');
+  const label = `Portfolio value in ${c.disp} from ${money(c.value[i0], c.disp)} to ${money(c.value[i1], c.disp)}, with net invested for comparison. Use the Table button for the data.`;
+  el.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(label)}">
+      <defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--accent);stop-opacity:.2"/><stop offset="1" style="stop-color:var(--accent);stop-opacity:0"/></linearGradient></defs>
+      ${grid}
+      <line x1="${m.l}" x2="${m.l + pw}" y1="${H - m.b}" y2="${H - m.b}" stroke="var(--rule)"/>
+      ${area ? `<path d="${area}" fill="url(#pg)"/>` : ''}
+      <path d="${step}" fill="none" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="5 4" stroke-linejoin="round"/>
+      <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${endDot}${markSvg}${xl}
+      <g class="hv" style="display:none"><line y1="${m.t}" y2="${H - m.b}" stroke="var(--ink-3)" stroke-dasharray="3 3"/><circle r="4.5" fill="var(--accent)" stroke="var(--surface)" stroke-width="2"/></g>
+    </svg><div class="tip" hidden></div>`;
+  port.geo = { m, pw, i0, i1, W, X, Y, marks };
+}
+function portHover(e) {
+  const g = port.geo, c = port.calc, el = $('#pChart');
+  if (!g || !c || c.empty) return;
+  const x = e.clientX - el.getBoundingClientRect().left;
+  const i = g.i1 === g.i0 ? g.i0 : Math.max(g.i0, Math.min(g.i1, Math.round(g.i0 + (x - g.m.l) / g.pw * (g.i1 - g.i0))));
+  const hv = $('.hv', el), tip = $('.tip', el);
+  if (!hv || !tip) return;
+  const px = g.X(i);
+  hv.style.display = '';
+  hv.firstElementChild.setAttribute('x1', px); hv.firstElementChild.setAttribute('x2', px);
+  hv.lastElementChild.setAttribute('cx', px); hv.lastElementChild.setAttribute('cy', g.Y(c.value[i]));
+  const gain = c.value[i] - c.invested[i], pct = c.invested[i] > 0 ? gain / c.invested[i] * 100 : 0;
+  tip.innerHTML = `<div class="t-date">${esc(fmtDate(c.dates[i]))}</div><div class="t-price">${money(c.value[i], c.disp)}</div>
+    <div class="t-row"><span>In ${c.alt}</span><b>${money(c.valueAlt[i], c.alt)}</b></div>
+    <div class="t-row"><span>Net invested</span><b>${money(c.invested[i], c.disp)}</b></div>
+    <div class="t-row"><span>Gain</span><b class="${dir(gain)}">${money(gain, c.disp, true)}${c.invested[i] > 0 ? ' (' + fmtPct(pct) + ')' : ''}</b></div>`
+    + (g.marks || []).filter(mk => Math.abs(g.X(mk.idx) - px) <= 7).map(mk => tradeTipHTML(mk.t, c.trRes[mk.t.id], c.disp)).join('');
+  tip.hidden = false;
+  const tw = tip.offsetWidth;
+  let left = px + 14;
+  if (left + tw > g.W - 4) left = px - tw - 14;
+  tip.style.left = Math.max(4, left) + 'px';
+}
+function hidePortHover() {
+  const el = $('#pChart');
+  const hv = el && $('.hv', el), tip = el && $('.tip', el);
+  if (hv) hv.style.display = 'none';
+  if (tip) tip.hidden = true;
+}
+
+/* ---------------- actions ---------------- */
+function commit(symbols) {
+  const v = currentView();
+  const added = [], dups = [];
+  for (const raw of symbols) {
+    const s = String(raw).trim().toUpperCase();
+    if (!SYM_RE.test(s)) continue;
+    if (v.tickers.includes(s) || added.includes(s)) { if (!dups.includes(s)) dups.push(s); }
+    else { v.tickers.push(s); added.push(s); }
+  }
+  if (added.length) {
+    save(); renderAll();
+    const last = cards.get(added[added.length - 1]);
+    requestAnimationFrame(() => {
+      if (!last) return;
+      last.el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      last.el.classList.add('flash');
+      setTimeout(() => last.el.classList.remove('flash'), 1300);
+    });
+    toast(`Added ${added.join(', ')}${dups.length ? ` (${dups.join(', ')} already here)` : ''}`);
+  } else if (dups.length) {
+    toast(`${dups.join(', ')} ${dups.length > 1 ? 'are' : 'is'} already on this screen`);
+  }
+}
+
+function removeTicker(sym) {
+  const v = currentView();
+  const i = v.tickers.indexOf(sym);
+  if (i < 0) return;
+  v.tickers.splice(i, 1);
+  closeMenu(); save(); renderAll();
+  toast(state.activeId === 'scratch' ? `Removed ${sym}` : `Removed ${sym} from “${v.name}”`);
+}
+
+function createFolder(name) {
+  const f = { id: uid(), name: name.trim().slice(0, 40) || 'Untitled', tickers: [] };
+  state.folders.push(f);
+  save(); renderRail(); refreshChrome();
+  return f;
+}
+
+function setMembership(sym, folderId, on) {
+  const f = state.folders.find(x => x.id === folderId);
+  if (!f) return;
+  const has = f.tickers.includes(sym);
+  if (on && !has) f.tickers.push(sym);
+  if (!on && has) f.tickers = f.tickers.filter(s => s !== sym);
+  save(); renderRail();
+  if (state.activeId === folderId) { closeMenu(); renderBoard(); }
+  refreshChrome();
+}
+
+function switchView(id) {
+  if (id === state.activeId) return;
+  closeMenu();
+  state.activeId = id; save();
+  renderAll();
+  window.scrollTo({ top: 0 });
+}
+
+function deleteFolder(id) {
+  state.folders = state.folders.filter(f => f.id !== id);
+  if (state.activeId === id) state.activeId = 'scratch';
+  save(); renderAll();
+}
+
+/* ---------------- rail (folders) ---------------- */
+const viewList = $('#viewList'), folderList = $('#folderList'), newSlot = $('#newFolderSlot');
+let renamingId = null, confirmingId = null, creating = false;
+
+function renderRail() {
+  viewList.innerHTML = `<li><button class="nav" type="button" data-act="view" data-id="scratch" aria-current="${state.activeId === 'scratch'}">${icon('grid')}<span class="nav-name">Scratchpad</span><span class="count">${state.scratch.length}</span></button></li>
+    <li><button class="nav" type="button" data-act="view" data-id="portfolio" aria-current="${state.activeId === 'portfolio'}">${icon('pie')}<span class="nav-name">Portfolio</span><span class="count">${state.trades.length}</span></button></li>`;
+
+  folderList.innerHTML = state.folders.map(f => {
+    if (confirmingId === f.id) {
+      return `<li class="confirm"><span>Delete “${esc(f.name)}”?<small>The tickers themselves aren’t affected.</small></span>
+        <button type="button" class="danger" data-act="delete-yes" data-id="${esc(f.id)}">Delete</button>
+        <button type="button" data-act="delete-no">Keep</button></li>`;
+    }
+    if (renamingId === f.id) {
+      return `<li><form class="inline" data-form="rename" data-id="${esc(f.id)}">
+        <input type="text" maxlength="40" value="${esc(f.name)}" aria-label="Folder name">
+        <button class="icon-btn sm" type="submit" aria-label="Save name">${icon('check')}</button></form></li>`;
+    }
+    return `<li><button class="nav" type="button" data-act="view" data-id="${esc(f.id)}" aria-current="${state.activeId === f.id}">${icon('folder')}<span class="nav-name">${esc(f.name)}</span><span class="count">${f.tickers.length}</span></button>
+      <span class="nav-actions">
+        <button class="icon-btn sm" type="button" data-act="rename" data-id="${esc(f.id)}" aria-label="Rename ${esc(f.name)}" title="Rename">${icon('pencil', 14)}</button>
+        <button class="icon-btn sm" type="button" data-act="delete" data-id="${esc(f.id)}" aria-label="Delete ${esc(f.name)}" title="Delete">${icon('trash', 14)}</button>
+      </span></li>`;
+  }).join('');
+
+  newSlot.innerHTML = creating
+    ? `<form class="inline" data-form="create"><input type="text" maxlength="40" placeholder="Folder name" aria-label="New folder name"><button class="icon-btn sm" type="submit" aria-label="Create folder">${icon('check')}</button></form>`
+    : `<button class="new-folder" type="button" data-act="new">${icon('plus')}New folder</button>`;
+  $('#folderHint').hidden = state.folders.length > 0;
+
+  const focusInput = $('input', folderList) || $('input', newSlot);
+  if (focusInput && (renamingId || creating)) { focusInput.focus(); focusInput.select(); }
+}
+
+$('.rail').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const id = b.dataset.id;
+  switch (b.dataset.act) {
+    case 'view': switchView(id); break;
+    case 'new': creating = true; renamingId = null; confirmingId = null; renderRail(); break;
+    case 'rename': renamingId = id; confirmingId = null; creating = false; renderRail(); break;
+    case 'delete': confirmingId = id; renamingId = null; creating = false; renderRail(); break;
+    case 'delete-no': confirmingId = null; renderRail(); break;
+    case 'delete-yes': confirmingId = null; deleteFolder(id); break;
+  }
+});
+$('.rail').addEventListener('submit', e => {
+  const form = e.target.closest('form[data-form]');
+  if (!form) return;
+  e.preventDefault();
+  const name = form.querySelector('input').value.trim();
+  if (form.dataset.form === 'create') {
+    creating = false;
+    if (name) { const f = createFolder(name); switchView(f.id); } else renderRail();
+  } else if (form.dataset.form === 'rename') {
+    const f = state.folders.find(x => x.id === form.dataset.id);
+    renamingId = null;
+    if (f && name) { f.name = name.slice(0, 40); save(); }
+    renderAll();
+  }
+});
+$('.rail').addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (creating || renamingId) { creating = false; renamingId = null; renderRail(); }
+});
+
+/* backup */
+$('#exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'ticker-board-backup.json';
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+$('#importBtn').addEventListener('click', () => $('#importFile').click());
+$('#importFile').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file) return;
+  try {
+    state = sanitize(JSON.parse(await file.text()));
+    save(); renamingId = confirmingId = null; creating = false; renderAll();
+    toast(`Imported ${state.folders.length} folder${state.folders.length === 1 ? '' : 's'}`);
+  } catch (err) { toast('That file isn’t a Ticker Board backup'); }
+});
+
+/* ---------------- board ---------------- */
+const boardEl = $('#board');
+
+function persistOrder() {
+  const order = [...boardEl.querySelectorAll('.card')].map(c => c.dataset.sym);
+  const v = currentView();
+  if (order.length !== v.tickers.length || !order.every(s => v.tickers.includes(s))) return;
+  v.tickers.splice(0, v.tickers.length, ...order);
+  save();
+}
+
+/* Drag a card by its handle. The card follows the pointer; when the pointer
+   passes over another card, the two swap places and the others slide aside. */
+function startReorder(card, e) {
+  if (e.button !== 0) return;
+  const el = card.el, pid = e.pointerId;
+  const startX = e.clientX, startY = e.clientY;
+  let active = false, lastX = startX, lastY = startY, grabX = 0, grabY = 0, raf = 0, lastSwap = 0;
+
+  const cardsNow = () => [...boardEl.querySelectorAll('.card')];
+  const place = () => {
+    el.style.transform = 'none';
+    const r = el.getBoundingClientRect();
+    el.style.transform = `translate(${lastX - grabX - r.left}px, ${lastY - grabY - r.top}px)`;
+  };
+  const swapAt = () => {
+    if (performance.now() - lastSwap < 160) return;
+    const others = cardsNow().filter(c => c !== el);
+    const hit = others.find(c => { const r = c.getBoundingClientRect(); return lastX >= r.left && lastX <= r.right && lastY >= r.top && lastY <= r.bottom; });
+    if (!hit) return;
+    const before = new Map(others.map(c => [c, c.getBoundingClientRect()]));
+    const list = cardsNow();
+    if (list.indexOf(hit) > list.indexOf(el)) hit.after(el); else hit.before(el);
+    lastSwap = performance.now();
+    for (const [c, r0] of before) {
+      const r1 = c.getBoundingClientRect();
+      const dx = r0.left - r1.left, dy = r0.top - r1.top;
+      if (dx || dy) c.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 180, easing: 'ease-out' });
+    }
+    place();
+  };
+  /* Runs every frame while dragging: auto-scroll near the screen edges and
+     re-check what is under the pointer, so a swap that was throttled still
+     happens once the pointer has settled. */
+  const loop = () => {
+    if (!active) return;
+    const top = 57 + 50, bottom = window.innerHeight - 60;
+    const dy = lastY < top ? -Math.min(20, (top - lastY) / 4 + 2) : lastY > bottom ? Math.min(20, (lastY - bottom) / 4 + 2) : 0;
+    if (dy) window.scrollBy(0, dy);
+    place(); swapAt();
+    raf = requestAnimationFrame(loop);
+  };
+  const begin = () => {
+    active = true;
+    const r = el.getBoundingClientRect();
+    grabX = startX - r.left; grabY = startY - r.top;
+    el.classList.add('dragging'); document.body.classList.add('reordering');
+    closeMenu(); card.hideHover();
+    raf = requestAnimationFrame(loop);
+  };
+  /* Listen on the window: moving the card in the DOM releases pointer capture,
+     so listeners on the handle would stop receiving events after a swap. */
+  const onMove = ev => {
+    if (ev.pointerId !== pid) return;
+    lastX = ev.clientX; lastY = ev.clientY;
+    if (!active && Math.hypot(lastX - startX, lastY - startY) > 5) begin();
+    if (active) { place(); swapAt(); }
+  };
+  const finish = ev => {
+    if (ev && ev.pointerId !== pid) return;
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', finish);
+    window.removeEventListener('pointercancel', finish);
+    cancelAnimationFrame(raf);
+    if (!active) return;
+    active = false;
+    const shown = el.getBoundingClientRect();
+    el.style.transform = 'none';
+    const home = el.getBoundingClientRect();
+    document.body.classList.remove('reordering');
+    const anim = el.animate([{ transform: `translate(${shown.left - home.left}px, ${shown.top - home.top}px)` }, { transform: 'none' }], { duration: 170, easing: 'ease-out' });
+    anim.onfinish = anim.oncancel = () => el.classList.remove('dragging');
+    persistOrder();
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', finish);
+  window.addEventListener('pointercancel', finish);
+}
+function refreshChrome() { for (const c of cards.values()) c.syncChrome(); }
+
+function renderBoard() {
+  const v = currentView();
+  const isPort = state.activeId === 'portfolio';
+  appEl.dataset.view = isPort ? 'portfolio' : 'board';
+  boardEl.hidden = isPort; portEl.hidden = !isPort; $('#curSeg').hidden = false; syncPortControls();
+  $('#viewTitle').textContent = v.name;
+  if (isPort) { $('#viewSub').textContent = ''; renderPortfolio(); return; }
+  $('#viewSub').textContent = v.tickers.length
+    ? `${v.tickers.length} ticker${v.tickers.length === 1 ? '' : 's'} · ` + (matchMedia('(pointer: coarse)').matches
+      ? 'slide a finger across a chart to read values · drag the dots to reorder'
+      : 'drag across a chart to zoom, double-click to reset · drag the dots to reorder')
+    : '';
+  $('#symInput').placeholder = state.activeId === 'scratch'
+    ? 'Add tickers, e.g. AAPL, TSLA, ^GSPC, BTC-USD'
+    : `Add tickers to “${v.name}”`;
+
+  if (!v.tickers.length) {
+    const msg = state.activeId === 'scratch'
+      ? 'Search for a company above, or type one or more tickers separated by commas. Each one gets its own chart.'
+      : 'Add tickers here with the search box, or open the Scratchpad and use the folder button on a chart.';
+    boardEl.replaceChildren();
+    boardEl.insertAdjacentHTML('beforeend', `<div class="empty"><h2>${state.activeId === 'scratch' ? 'Nothing on screen yet' : 'This folder is empty'}</h2><p>${msg}</p>
+      <div class="chips">${SUGGESTED.map(s => `<button type="button" class="chip" data-sym="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>`);
+    return;
+  }
+  const els = v.tickers.map(s => getCard(s));
+  boardEl.replaceChildren(...els.map(c => c.el));
+  for (const c of els) { c.syncChrome(); c.syncRanges(); c.ensureFresh(); }
+}
+boardEl.addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (chip) commit([chip.dataset.sym]);
+});
+
+function renderAll() { renderRail(); renderBoard(); }
+
+/* ---------------- updated stamp + refresh ---------------- */
+function renderUpdated() {
+  $('#updated').textContent = lastUpdated
+    ? 'Updated ' + new Date(lastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+    : '';
+}
+const refreshBtn = $('#refreshAll');
+refreshBtn.innerHTML = icon('refresh');
+async function refreshAll() {
+  const v = currentView();
+  refreshBtn.classList.add('spinning');
+  refreshRates();
+  if (state.activeId === 'portfolio') await loadPortfolio(true);
+  else await Promise.all(v.tickers.map(s => getCard(s).load()));
+  refreshBtn.classList.remove('spinning');
+}
+refreshBtn.addEventListener('click', refreshAll);
+setInterval(() => { if (!document.hidden) refreshAll(); }, REFRESH_MS);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) for (const s of currentView().tickers) getCard(s).ensureFresh();
+});
+
+/* ---------------- add / search box ---------------- */
+const input = $('#symInput'), sugg = $('#sugg');
+let suggItems = [], suggIndex = -1, searchTimer = 0, searchSeq = 0;
+
+const tokens = text => text.split(/[\s,;]+/).filter(Boolean);
+const lastToken = text => { const m = text.match(/[^\s,;]*$/); return m ? m[0] : ''; };
+const priorTokens = text => tokens(text.slice(0, text.length - lastToken(text).length));
+
+function closeSugg() {
+  sugg.hidden = true; suggItems = []; suggIndex = -1;
+  input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant');
+}
+function renderSugg(empty) {
+  if (!suggItems.length && !empty) { closeSugg(); return; }
+  sugg.innerHTML = suggItems.length
+    ? suggItems.map((s, i) => `<li role="option" id="sg${i}" data-i="${i}" aria-selected="${i === suggIndex}"><span class="s-sym">${esc(s.symbol)}</span><span class="s-name">${esc(s.name)}</span><span class="s-meta">${esc(s.meta)}</span></li>`).join('')
+    : '<li class="s-empty" role="option" aria-selected="false">No matches. Press Enter to add what you typed.</li>';
+  sugg.hidden = false; input.setAttribute('aria-expanded', 'true');
+  if (suggIndex >= 0) input.setAttribute('aria-activedescendant', 'sg' + suggIndex); else input.removeAttribute('aria-activedescendant');
+}
+async function runSearch(q) {
+  const seq = ++searchSeq;
+  try {
+    const url = FILE_MODE ? `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=8&newsCount=0` : `/api/search?q=${encodeURIComponent(q)}`;
+    const json = await getJSON(url);
+    if (seq !== searchSeq || lastToken(input.value) !== q) return;
+    suggItems = (json.quotes || []).filter(x => x.symbol && SYM_RE.test(String(x.symbol).toUpperCase())).slice(0, 8).map(x => ({
+      symbol: x.symbol,
+      name: x.longname || x.shortname || '',
+      meta: [x.quoteType, x.exchDisp].filter(Boolean).join(' · '),
+    }));
+    suggIndex = -1;
+    renderSugg(true);
+  } catch (e) { if (seq === searchSeq) closeSugg(); }
+}
+input.addEventListener('input', () => {
+  clearTimeout(searchTimer);
+  const q = lastToken(input.value);
+  if (!q) { closeSugg(); return; }
+  searchTimer = setTimeout(() => runSearch(q), 200);
+});
+function pick(i) {
+  const s = suggItems[i]; if (!s) return;
+  const prior = priorTokens(input.value);
+  input.value = ''; closeSugg();
+  commit([...prior, s.symbol]);
+  input.focus();
+}
+input.addEventListener('keydown', e => {
+  if (!sugg.hidden && suggItems.length) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); suggIndex = (suggIndex + 1) % suggItems.length; renderSugg(); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); suggIndex = (suggIndex - 1 + suggItems.length) % suggItems.length; renderSugg(); return; }
+    if (e.key === 'Enter' && suggIndex >= 0) { e.preventDefault(); pick(suggIndex); return; }
+  }
+  if (e.key === 'Escape') closeSugg();
+});
+sugg.addEventListener('pointerdown', e => {
+  const li = e.target.closest('li[data-i]');
+  if (li) { e.preventDefault(); pick(+li.dataset.i); }
+});
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.add')) closeSugg(); });
+$('#addForm').addEventListener('submit', e => {
+  e.preventDefault();
+  clearTimeout(searchTimer); searchSeq++;
+  const syms = tokens(input.value);
+  closeSugg();
+  if (!syms.length) { input.focus(); return; }
+  input.value = '';
+  commit(syms);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && state.activeId !== 'portfolio' && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) { e.preventDefault(); input.focus(); }
+});
+
+/* ---------------- start ---------------- */
+loadState().then(() => { renderAll(); renderUpdated(); });
+})();
+</script>
+</body>
+</html>
