@@ -220,7 +220,7 @@ body.reordering, body.reordering * { cursor: grabbing !important; user-select: n
   .facts { flex-basis: 100%; min-width: 0; margin-top: 8px; }
 }
 @container (min-width: 400px) and (max-width: 520px) {
-  .facts dl { grid-template-columns: 1fr 1fr; column-gap: 24px; }
+  .facts dl { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 24px; }
   .facts dl .wk { grid-column: 1 / -1; }
 }
 
@@ -266,10 +266,12 @@ body.reordering, body.reordering * { cursor: grabbing !important; user-select: n
 .chg { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 9px; border-radius: 6px; font: 500 13px var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; background: var(--bg); color: var(--ink-2); }
 .chg.up { background: color-mix(in srgb, var(--up) 13%, transparent); }
 .chg.down { background: color-mix(in srgb, var(--down) 13%, transparent); }
-.facts dl { margin: 14px 0 0; display: grid; }
-.facts dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 6px 0; border-top: 1px solid var(--rule-2); }
+.facts dl { margin: 14px 0 0; display: grid; grid-template-columns: minmax(0, 1fr); }
+.facts dl > div { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 12px; padding: 6px 0; border-top: 1px solid var(--rule-2); }
 .facts dt { color: var(--ink-3); white-space: nowrap; }
-.facts dd { margin: 0; text-align: right; white-space: nowrap; font: 400 13px var(--font-num); font-variant-numeric: tabular-nums; }
+.facts dd .sub { display: block; font: 400 11px var(--font-ui); color: var(--ink-3); white-space: normal; line-height: 1.35; }
+.facts dd .sub.up, .facts dd .sub.down { font-family: var(--font-num); }
+.facts dd { margin: 0 0 0 auto; text-align: right; white-space: nowrap; font: 400 13px var(--font-num); font-variant-numeric: tabular-nums; }
 .facts .wk { display: block; }
 .facts .wk .top-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .wk .lab52 { color: var(--ink-3); }
@@ -663,6 +665,46 @@ const chartURL = (sym, range, interval) => FILE_MODE
   ? `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=${interval}`
   : `/api/chart?symbol=${encodeURIComponent(sym)}&range=${range}&interval=${interval}`;
 
+/* Yahoo's quote record (P/E, EPS, earnings date, pre/after-hours prices). Nice to
+   have: if it can't be loaded the card just leaves those rows out. */
+const quoteURL = sym => FILE_MODE ? null : `/api/quote?symbol=${encodeURIComponent(sym)}`;
+async function loadQuoteRec(sym) {
+  const u = quoteURL(sym);
+  if (!u) return null;
+  try {
+    const j = await getJSON(u);
+    return (j && j.quoteResponse && j.quoteResponse.result && j.quoteResponse.result[0]) || null;
+  } catch (e) { return null; }
+}
+const numOrNull = v => typeof v === 'number' && isFinite(v) ? v : null;
+/* f: display units per native unit. Everything price-like is converted; P/E is a plain ratio. */
+function buildExtra(rec, q, f, show) {
+  if (!rec) return null;
+  const regT = numOrNull(rec.regularMarketTime) || 0;
+  const regP = numOrNull(rec.regularMarketPrice) != null ? rec.regularMarketPrice : q.nativePrice;
+  const x = { state: rec.marketState || '', pe: numOrNull(rec.trailingPE), eps: numOrNull(rec.epsTrailingTwelveMonths), epsCur: '', ext: [], earn: null };
+  if (x.eps != null) {
+    const fc = rec.financialCurrency;
+    if (fc && fc !== q.currency) { const c = convert(x.eps, fc, show); if (c != null) x.eps = c; else x.epsCur = fc; }
+    else x.eps *= f;
+  }
+  for (const [label, price, time] of [['Pre-market', rec.preMarketPrice, rec.preMarketTime], ['After hours', rec.postMarketPrice, rec.postMarketTime]]) {
+    const p = numOrNull(price), t = numOrNull(time);
+    if (p != null && t != null && t > regT && regP) x.ext.push({ label, price: p * f, change: (p - regP) * f, pct: (p / regP - 1) * 100, t: t * 1000 });
+  }
+  x.ext.sort((a, b) => b.t - a.t);
+  const stamps = [rec.earningsTimestampStart, rec.earningsTimestamp, rec.earningsTimestampEnd].map(numOrNull).filter(v => v != null);
+  if (stamps.length) {
+    const nowS = Date.now() / 1000, upcoming = stamps.filter(s => s > nowS - 43200);
+    const end = numOrNull(rec.earningsTimestampEnd);
+    if (upcoming.length) {
+      const t = Math.min(...upcoming);
+      x.earn = { t: t * 1000, next: true, to: end != null && end - t > 86400 ? end * 1000 : null, est: !!rec.isEarningsDateEstimate };
+    } else x.earn = { t: Math.max(...stamps) * 1000, next: false, to: null, est: false };
+  }
+  return x;
+}
+
 function parseChart(json) {
   const res = json && json.chart && json.chart.result && json.chart.result[0];
   if (!res) {
@@ -992,13 +1034,14 @@ class Card {
     this.el.setAttribute('aria-busy', 'true');
     try {
       const r = this.rangeDef;
-      const [chart, daily] = await Promise.all([
+      const [chart, daily, quote] = await Promise.all([
         getJSON(chartURL(this.sym, r.range, r.interval)).then(parseChart),
         getJSON(chartURL(this.sym, '5d', '1d')).then(parseChart),
+        loadQuoteRec(this.sym),
       ]);
       if (token !== this.token) return;
       if (!chart.points.length) throw new Error(`No price data for ${this.rangeKey} yet. Try a longer range.`);
-      this.raw = { chart, daily, rangeKey: this.rangeKey };
+      this.raw = { chart, daily, quote, rangeKey: this.rangeKey };
       this.noteEl.hidden = true;
       await this.applyCurrency();
       if (token !== this.token) return;
@@ -1038,6 +1081,7 @@ class Card {
     const f = pts[pts.length - 1].f;
     const q = buildQuote(raw.daily.meta.regularMarketPrice != null ? raw.daily.meta : raw.chart.meta, raw.daily.points);
     q.nativePrice = q.price; q.showCur = show; q.fNow = f;
+    q.x = buildExtra(raw.quote, q, f, show);
     for (const k of ['price', 'prev', 'change', 'dayHigh', 'dayLow', 'high52', 'low52']) if (q[k] != null) q[k] *= f;
     this.data = { meta: raw.chart.meta, points: pts };
     this.quote = q;
@@ -1129,13 +1173,29 @@ class Card {
         <div class="ends"><span>${fmtPrice(q.low52)}</span><span>${fmtPrice(q.high52)}</span></div></div>`;
     }
     const asof = q.time ? dtf(q.tz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(q.time) : '';
-    const fxRows = ['USD', 'CAD'].map(c => `<div><dt>Price · ${c}</dt><dd>${fmtPrice(c === q.showCur ? q.price : convert(q.nativePrice, q.currency, c))}</dd></div>`).join('');
+    const x = q.x, marketClosed = q.open !== true && !(x && x.state === 'REGULAR');
+    const tsFmt = dtf(q.tz, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+    const extRows = x && marketClosed ? x.ext.map(e => `<div><dt>${esc(e.label)}</dt><dd>${fmtPrice(e.price)}
+        <span class="sub ${dir(e.change)}">${fmtSigned(e.change, e.price)} (${fmtPct(e.pct)})</span><span class="sub">${esc(tsFmt.format(e.t))}</span></dd></div>`).join('') : '';
+    let earnTxt = '—', earnLbl = 'Earnings', earnSub = '';
+    if (x && x.earn) {
+      const dFmt = dtf(q.tz, { month: 'short', day: 'numeric', year: 'numeric' });
+      earnTxt = dFmt.format(x.earn.t); earnLbl = x.earn.next ? 'Next earnings' : 'Last earnings';
+      if (x.earn.to) earnSub = `Estimated, by ${dtf(q.tz, { month: 'short', day: 'numeric' }).format(x.earn.to)}`;
+      else if (x.earn.est) earnSub = 'Estimated';
+    }
+    const signed = v => (v < 0 ? '−' : '') + fmtPrice(Math.abs(v));
+    const valRows = `
+        <div><dt>P/E ratio</dt><dd>${x && x.pe != null ? nf(2, 2).format(x.pe) : '—'}${x && x.pe == null && x.eps != null && x.eps < 0 ? '<span class="sub">Not profitable</span>' : ''}</dd></div>
+        <div><dt>EPS</dt><dd>${x && x.eps != null ? signed(x.eps) + (x.epsCur ? ' ' + esc(x.epsCur) : '') : '—'}</dd></div>
+        <div><dt>${earnLbl}</dt><dd>${earnTxt}${earnSub ? `<span class="sub">${esc(earnSub)}</span>` : ''}</dd></div>`;
     const posHtml = positionRows(this, q);
     f.innerHTML = `
       <div class="price"><span>${fmtPrice(q.price)}</span><span class="cur">${esc(q.showCur)}</span></div>
       ${chgHtml}
       <dl>
-        ${fxRows}
+        ${extRows}
+        ${valRows}
         <div><dt>${esc(lbl)} change</dt><dd class="${dir(wch)}">${arrow(wch)} ${fmtPct(wch)}</dd></div>
         <div><dt>High · ${esc(lbl)}</dt><dd>${fmtPrice(hi)}</dd></div>
         <div><dt>Low · ${esc(lbl)}</dt><dd>${fmtPrice(lo)}</dd></div>

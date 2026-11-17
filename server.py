@@ -12,6 +12,7 @@ Your folders and tickers are saved on this computer, in
 ticker-board-data.json next to this file (set TICKERBOARD_DATA to put it
 somewhere else). Back that file up or copy it to move your setup.
 """
+import http.cookiejar
 import json
 import os
 import re
@@ -33,6 +34,7 @@ UPSTREAMS = [
     ).split(",")
     if u.strip()
 ]
+COOKIE_URL = os.environ.get("TICKERBOARD_COOKIE_URL", "https://fc.yahoo.com")
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
@@ -102,6 +104,71 @@ def fetch_upstream(path_and_query):
         if status == 404:  # unknown symbol: the other host will say the same
             return 404, body
         result = (status, body)
+    return result
+
+
+_crumb = {"opener": None, "value": None}
+_crumb_lock = threading.Lock()
+
+
+def _new_session():
+    """Yahoo's quote endpoint wants a cookie plus a 'crumb' token tied to it."""
+    jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+    opener.addheaders = [("User-Agent", USER_AGENT), ("Accept", "*/*")]
+    try:
+        opener.open(COOKIE_URL, timeout=8).read()
+    except urllib.error.HTTPError:
+        pass  # the cookie host answers 404 but still sets the cookie
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return None, None
+    for base in UPSTREAMS:
+        try:
+            value = opener.open(base + "/v1/test/getcrumb", timeout=8).read().decode("utf-8", "replace").strip()
+        except (urllib.error.URLError, TimeoutError, OSError):
+            continue
+        if value and len(value) < 64 and "<" not in value and " " not in value:
+            return opener, value
+    return None, None
+
+
+def fetch_quote(symbol):
+    """Yahoo's quote record: P/E, EPS, earnings dates, pre/post-market prices. Cached briefly."""
+    key = "quote:" + symbol
+    now = time.time()
+    with _lock:
+        hit = _cache.get(key)
+        if hit and now - hit[0] < CACHE_SECONDS:
+            return 200, hit[1]
+    result = (502, json.dumps({"error": "Could not reach the data source"}).encode())
+    for attempt in (0, 1):
+        with _crumb_lock:
+            if attempt == 1 or not _crumb["value"]:
+                _crumb["opener"], _crumb["value"] = _new_session()
+            opener, crumb = _crumb["opener"], _crumb["value"]
+        if not crumb:
+            return 502, json.dumps({"error": "Could not get a session from the data source"}).encode()
+        for base in UPSTREAMS:
+            url = base + "/v7/finance/quote?" + urllib.parse.urlencode({"symbols": symbol, "crumb": crumb})
+            try:
+                with opener.open(url, timeout=12) as response:
+                    status, body = response.status, response.read()
+            except urllib.error.HTTPError as err:
+                status, body = err.code, err.read()
+            except (urllib.error.URLError, TimeoutError, OSError) as err:
+                result = (502, json.dumps({"error": str(err)}).encode())
+                continue
+            if status == 200:
+                with _lock:
+                    if len(_cache) > 400:
+                        _cache.clear()
+                    _cache[key] = (now, body)
+                return 200, body
+            result = (status, body)
+            if status in (401, 403):
+                break  # stale crumb: start a new session and try once more
+        else:
+            return result
     return result
 
 
@@ -180,6 +247,13 @@ class Handler(BaseHTTPRequestHandler):
                 interval,
             )
             status, body = fetch_upstream(path)
+            return self.reply(status, body)
+
+        if url.path == "/api/quote":
+            symbol = params.get("symbol", [""])[0]
+            if not SYMBOL_RE.match(symbol):
+                return self.bad_request("Invalid symbol")
+            status, body = fetch_quote(symbol)
             return self.reply(status, body)
 
         if url.path == "/api/search":
